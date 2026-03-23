@@ -1,0 +1,92 @@
+Safari req's
+
+we need to define parent classes that other classes will need to use:
+e.g. if a tourist comes it will need to inheret some basic features from the hotel.
+        - check in
+        - eat dinner at restaurant
+        - book safari excursion
+        - chill in the swimming pool 
+        - etc...
+    
+current ideas:
+
+    Parent classes:
+
+        Hotel
+
+        Savanna
+
+        Car
+
+        Town
+
+        Watering_Hole | River
+            - shared on water usage
+             
+
+        Groups? -- maybe for animals that are in a herd or tourist groups
+
+        Time?
+
+    for now these are all of the ones I've come up with so far if we think of more
+     we can keep breaking it down.
+
+    Animal Classes:
+
+        Elephant
+            - survival stats
+
+        Human
+            
+        Lion
+
+        Giraffe
+
+        Hyena
+
+        Hippo
+
+        Crocodile
+
+        Rhino
+
+        Zebra 
+
+        Cheetah
+
+        some birds as well maybe we add smaller animals
+
+    same thing as before we can add or shrink them depending on how much we need
+    to get done in that small amount of time.
+
+
+What to think about:
+
+    what else do we need to simulate as an independent object?
+
+    We need to start defining interactions between the different elements
+        can we simplify certain processes? -- do we need certain classes
+    
+    how do we define the time rate of the simulation 24 hour cycles etc...
+        1 hour = 1 e.g time.sleep(1) = 1 hour .5 30 minutes .25
+
+        24 hours --> multiplyer time.sleep(1 * mult) --> 
+            mult allows us to control the speed of the simulation
+
+    What areas are we currently missing?
+        what kind or random distributions for event simulation
+            what are our locks?
+            what needs parallelized?
+                can we ask AI for pixel art?
+
+    Shared resources: 
+    - water hole 
+    - rooms in hotel 
+    - tables in restaurant ? (brining out the food) 
+    - safari guide cars ? = length or semaphore ? 
+    - traffic lights ? 
+    - 
+    - 
+
+
+
