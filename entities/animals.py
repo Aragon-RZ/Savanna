@@ -65,4 +65,3 @@ class Zebra(Entity):
 
 z = Zebra(entity_id=1, name="Zara the Zebra", x=0, y=0)
 
-z.move_randomly()
