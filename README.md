@@ -1,41 +1,51 @@
 # Savanna
-Savanna simulation for school final project
+Savanna simulation for school final project.
 
-# 🦁 Safari Ecosystem Simulation
+## Safari Ecosystem Simulation
 
-An agent-based, object-oriented simulation of a bustling Safari Park. This project models the complex interactions between wildlife, environments, and human tourists using Python. It features a custom time-tick engine and utilizes concurrent programming concepts (Locks and Semaphores) to manage shared resources.
+An agent-based Python simulation of a safari park. The current MVP models thirsty zebras competing for a watering hole while a hungry lion hunts nearby on the same tick-based map.
 
-## 📋 Project Overview
+## Project Overview
 
-The simulation handles two main ecosystems interacting with each other:
-1. **The Natural World:** Animals (Herbivores and Carnivores) managing their survival stats (hunger, thirst) and interacting with the environment.
-2. **The Tourism World:** Humans visiting the park, staying in hotels, and booking safari excursions.
+The simulation currently focuses on two interacting systems:
 
-### ✨ Core Mechanics
-* **Tick-Based Time Engine:** Decouples simulation time from real-time for stable state management.
-* **State Machines:** Entities transition between states dynamically (e.g., `WANDERING`, `SEEKING_WATER`, `HUNTING`, `DIRTY`, `CLEAN`).
-* **Resource Management:** * **Semaphores:** Manage multi-capacity resources like Watering Holes and Safari Car seats.
-  * **Locks:** Manage single-occupancy resources like Hotel Rooms and animal health pools during combat.
+1. Wildlife survival, movement, drinking, and hunting.
+2. Shared-resource coordination through the watering hole semaphore.
 
-## 🗂️ Project Structure
+## Core Mechanics
 
-We follow a strict Separation of Concerns architecture to prevent circular dependencies and keep the codebase modular:
+* **Tick-Based Time Engine:** The simulation advances in discrete ticks instead of depending on real-time updates from each entity.
+* **State Machines:** Entities transition through states such as `WANDERING`, `SEEKING_WATER`, `WAITING_IN_LINE`, `DRINKING`, `HUNTING`, and `EATING`.
+* **Resource Management:** Watering-hole capacity is controlled with a semaphore so multiple animals can drink without blocking the whole simulation.
+
+## Project Structure
 
 ```text
-safari_sim/
-├── main.py                   # Entry point and simulation initializer
-├── engine/                   # The core mechanics
-│   ├── simulation.py         # Main loop, Tick system, and entity master lists
-│   └── weather.py            # Manages seasons and environmental changes
-├── entities/                 # The moving agents (Actors)
-│   ├── base.py               # Foundational `Entity` class
-│   ├── animals.py            # Zebra, Lion, Elephant, etc.
-│   ├── humans.py             # Tourist, Guide, Housekeeper
-│   └── vehicles.py           # SafariCar
-├── environment/              # Stationary locations
-│   ├── base.py               # Foundational `Location` class
-│   ├── hotel.py              # Hotel and Room management
-│   └── nature.py             # Savanna, WateringHole, River
-└── utils/                    # Shared helpers
-    ├── constants.py          # Global simulation variables (TICK_RATE, MAX_THIRST)
-    └── states.py             # Enums for entity and environment states
+Savanna/
+├── main.py                   # Entry point
+├── engine/
+│   ├── builder.py            # Builds the default world
+│   ├── simulation.py         # Tick loop and interaction orchestration
+│   └── weather.py            # Placeholder for future weather logic
+├── entities/
+│   ├── base.py               # Shared entity movement and identity logic
+│   ├── animals.py            # Zebra and Lion behavior
+│   ├── humans.py             # Placeholder for human actors
+│   └── vehicles.py           # Placeholder for vehicles
+├── environment/
+│   ├── base.py               # Placeholder for environment primitives
+│   ├── hotel.py              # Placeholder for hotel logic
+│   └── nature.py             # Watering hole logic
+└── utils/
+    ├── constants.py          # Simulation constants
+    └── states.py             # Placeholder for shared enums/state helpers
+```
+
+## Running
+
+From the repository root:
+
+```bash
+cd Savanna
+python3 main.py
+```
