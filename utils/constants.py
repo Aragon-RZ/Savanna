@@ -2,6 +2,9 @@
 
 # Time Settings
 TICK_RATE = 1.0  # 1 real second = 1 simulation tick. (Lower this later to speed up time)
+TICKS_PER_DAY = 24
+SUNRISE_HOUR = 6   # 6:00 AM
+SUNSET_HOUR = 18   # 6:00 P
 
 # Map Settings
 GRID_WIDTH = 100

@@ -1,31 +1,25 @@
+
 # engine/simulation.py
 import time
 import threading
-from utils.constants import TICK_RATE
-import random
+from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR
 
 class SimulationEngine(threading.Thread):
-    def __init__(self):
-        # Initialize the Thread as a "daemon" so it automatically stops when the program closes
-        super().__init__(daemon=True) 
+    def __init__(self, max_ticks=50):
+        super().__init__()
         self.tick_count = 0
+        self.max_ticks = max_ticks
+        self.is_running = False
         self.entities = []
         self.environments = []
-        self.is_running = False  # Thread control flag
 
     def add_entity(self, entity):
         self.entities.append(entity)
-
-    def add_environment(self, env):
-        self.environments.append(env)
-
-    def stop(self):
-        """Gracefully shuts down the simulation thread."""
-        self.is_running = False
-        print("\n🛑 Stopping Simulation Engine...")
+        
+    def add_environment(self, environment):
+        self.environments.append(environment)
 
     def run(self):
-        """This overrides threading.Thread's run method. It executes when you call .start()"""
         self.is_running = True
         print("\n" + "="*40)
         print("🌍 SAFARI SIMULATION ENGINE STARTED")
@@ -33,17 +27,26 @@ class SimulationEngine(threading.Thread):
         
         while self.is_running:
             self.tick_count += 1
-            print(f"--- ⏰ Tick {self.tick_count} ---")
+            
+            # --- DAY/NIGHT CLOCK ---
+            current_hour = self.tick_count % TICKS_PER_DAY
+            
+            if current_hour == SUNRISE_HOUR:
+                print("\n🌅 The sun is rising over the savanna...")
+            elif current_hour == SUNSET_HOUR:
+                print("\n🌇 The sun is setting. It is getting dark...")
+
+            print(f"--- ⏰ Tick {self.tick_count} | Hour: {current_hour}:00 ---")
             
             # 1. Update entities
             for entity in self.entities:
-                entity.update()
-                status_parts = [f"State: {entity.state}"]
-                if hasattr(entity, "thirst"):
-                    status_parts.insert(0, f"Thirst: {entity.thirst}/100")
-                if hasattr(entity, "hunger"):
-                    status_parts.insert(0, f"Hunger: {entity.hunger}/100")
-                print(f"   [{entity.name}] " + " | ".join(status_parts))
+                if entity.is_alive:
+                    entity.update(current_hour) 
+                    
+                    status_parts = [f"State: {entity.state}"]
+                    if hasattr(entity, "thirst"):
+                        status_parts.insert(0, f"Thirst: {entity.thirst}/100")
+                    print(f"   [{entity.name} {entity.id}] @({entity.x}, {entity.y}) | " + " | ".join(status_parts))
 
                 # 2. Handle Environment Interactions
                 for env in self.environments:
@@ -56,47 +59,11 @@ class SimulationEngine(threading.Thread):
                         if entity.x == env.x and entity.y == env.y:
                             env.try_to_drink(entity)
 
-
-
-
-            # --- NEW PREDATOR/PREY LOGIC ----------------------------------
-
-            # 1. Filter our lists to see who is on the board
-            lions = [e for e in self.entities if type(e).__name__ == "Lion" and e.is_alive]
-            zebras = [e for e in self.entities if type(e).__name__ == "Zebra" and e.is_alive]
-
-            for lion in lions:
-                if lion.state == "HUNTING":
-                    # Give the Lion a target if it doesn't have one
-                    if zebras and (lion.target_prey is None or not lion.target_prey.is_alive):
-                        lion.target_prey = random.choice(zebras) # Simple radar: pick a random zebra
-                        print(f"👀 {lion.name} locked onto {lion.target_prey.name}!")
-
-                    # Check for collision: Did the Lion catch the Zebra?
-                    if lion.target_prey and lion.x == lion.target_prey.x and lion.y == lion.target_prey.y:
-                        
-                        # 🎲 THE PROBABILITY MECHANIC (e.g., 40% chance of a successful kill)
-                        kill_chance = 0.40 
-                        
-                        if random.random() < kill_chance:
-                            # SUCCESS
-                            print(f"🦁 💥 {lion.name} successfully hunted {lion.target_prey.name}!")
-                            lion.target_prey.is_alive = False # Kill the zebra
-                            lion.state = "EATING"
-                            lion.target_prey = None # Reset target
-                        else:
-                            # FAILURE
-                            print(f"💨 {lion.target_prey.name} escaped from {lion.name}'s ambush!")
-                            # Force the zebra to flee rapidly so it isn't eaten on the next tick
-                            lion.target_prey.move_randomly()
-                            lion.target_prey.move_randomly()
-                            lion.target_prey = None # Lion loses track, must find new prey next tick
-
-
-
-            # 3. Clean up dead entities
-            self.entities = [e for e in self.entities if e.is_alive]
-            
-            # 4. Wait for the next tick
+            # 3. Stop condition
+            if self.tick_count >= self.max_ticks:
+                print("\n🛑 Max ticks reached. Stopping simulation.")
+                self.is_running = False
+                break
+                
+            # 4. Wait for next tick
             time.sleep(TICK_RATE)
-            print("-" * 30)
