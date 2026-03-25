@@ -4,122 +4,152 @@
 # every tick to simulate their actions and interactions with the environment.
 
 
-
-##### ZEBRA #####
+# entities/animals.py
 import random
 from entities.base import Entity
-from utils.constants import (
-    HUNGER_THRESHOLD,
-    MAX_HUNGER,
-    MAX_THIRST,
-    THIRST_THRESHOLD,
-)
+from utils.constants import THIRST_THRESHOLD, MAX_THIRST, SUNRISE_HOUR, SUNSET_HOUR, MAX_HUNGER, HUNGER_THRESHOLD
 
-class Zebra(Entity):
-    def __init__(self, entity_id, name, x, y):
+# ==========================================
+# BASE ANIMAL LOGIC
+# ==========================================
+class Animal(Entity):
+    def __init__(self, entity_id, name, x, y, is_diurnal=True):
         super().__init__(entity_id, name, x, y)
         self.thirst = 0
-        self.target_water = None  # The Engine will give the Zebra this destination
+        self.hunger = 0
+        self.target_water = None
+        self.is_diurnal = is_diurnal
 
-    def update(self):
-        # 1. Check if dead
+    def die(self, cause):
+        self.is_alive = False
+        self.state = "DEAD"
+        print(f"💀 {self.name} died! Cause: {cause}.")
+
+    def update(self, current_hour, entities):
         if not self.is_alive:
             return
 
-        # 2. Handle the "DRINKING" state
-        if self.state == "DRINKING":
-            self.thirst -= 25  # Thirst goes down fast while drinking
-            if self.thirst <= 0:
-                self.thirst = 0
-                self.state = "WANDERING"
-                # (The Simulation Engine will tell the Watering Hole to release the lock)
-            return
-
-        # 3. Handle normal life (thirst goes up)
-        self.thirst += 1
+        # 1. Sleep Cycle
+        is_daytime = SUNRISE_HOUR <= current_hour < SUNSET_HOUR
+        should_be_awake = is_daytime if self.is_diurnal else not is_daytime
         
-        # 4. Handle Death
+        if not should_be_awake and self.state not in ["SLEEPING", "DRINKING"]:
+            self.state = "SLEEPING"
+            print(f"💤 {self.name} went to sleep.")
+        elif should_be_awake and self.state == "SLEEPING":
+            self.state = "WANDERING"
+            print(f"☀️/🌙 {self.name} woke up.")
+
+        # 2. Survival Stats (Skip movement if sleeping/drinking)
+        self.thirst += 2
+        self.hunger += 1
+        
         if self.thirst >= MAX_THIRST:
-            self.is_alive = False
-            self.state = "DEAD"
-            print(f"💀 {self.name} died of thirst!")
+            self.die("Extreme Thirst")
+            return
+        if self.hunger >= MAX_HUNGER:
+            self.die("Starvation")
             return
 
-        # 5. State Machine: Wandering vs. Seeking Water
-        if self.thirst >= THIRST_THRESHOLD:
-            self.state = "SEEKING_WATER"
-            self.move_towards_water()
-        else:
-            self.state = "WANDERING"
-            self.move_randomly()
+        if self.state in ["SLEEPING", "DRINKING"]:
+            if self.state == "DRINKING":
+                self.thirst -= 25
+                if self.thirst <= 0:
+                    self.thirst = 0
+                    self.state = "WANDERING"
+            return 
+
+        # 3. Let the specific animal decide what to do!
+        self.act(entities)
+
+    def act(self, entities):
+        pass # Overridden by Herbivore/Carnivore
 
     def move_randomly(self):
         self.x += random.choice([-1, 0, 1])
         self.y += random.choice([-1, 0, 1])
 
-    def move_towards_water(self):
-        if not self.target_water:
-            return  # Can't move if it doesn't know where the water is!
+    def move_towards(self, target_x, target_y):
+        if self.x < target_x: self.x += 1
+        elif self.x > target_x: self.x -= 1
+        if self.y < target_y: self.y += 1
+        elif self.y > target_y: self.y -= 1
+
+# ==========================================
+# DIET TYPES (The Logic)
+# ==========================================
+class Herbivore(Animal):
+    def act(self, entities):
+        self.hunger = 0 # Grass is everywhere, they don't starve for now
         
-        # Move 1 step closer on the X and Y axis
-        if self.x < self.target_water.x: self.x += 1
-        elif self.x > self.target_water.x: self.x -= 1
-        
-        if self.y < self.target_water.y: self.y += 1
-        elif self.y > self.target_water.y: self.y -= 1
+        if self.thirst >= THIRST_THRESHOLD and self.target_water:
+            self.state = "SEEKING_WATER"
+            self.move_towards(self.target_water.x, self.target_water.y)
+        else:
+            self.state = "WANDERING"
+            self.move_randomly()
 
+class Insectivore(Herbivore):
+    pass # Behaves exactly like a herbivore, just eats bugs instead of grass
 
-#### LION #####
-
-class Lion(Entity):
-    def __init__(self, entity_id, name, x, y):
-        super().__init__(entity_id, name, x, y)
-        self.hunger = 0
-        self.target_prey = None  # The Engine will assign a Zebra to this
-
-    def update(self):
-        if not self.is_alive:
+class Carnivore(Animal):
+    def act(self, entities):
+        # 1. Prioritize Water
+        if self.thirst >= THIRST_THRESHOLD and self.target_water:
+            self.state = "SEEKING_WATER"
+            self.move_towards(self.target_water.x, self.target_water.y)
             return
 
-        # 1. Handle the "EATING" state
-        if self.state == "EATING":
-            self.hunger -= 50  # Eating restores hunger fast
-            if self.hunger <= 0:
-                self.hunger = 0
-                self.state = "WANDERING"
-            return
-
-        # 2. Normal life (hunger goes up)
-        self.hunger += 1
-
-        # 3. Handle Starvation
-        if self.hunger >= MAX_HUNGER:
-            self.is_alive = False
-            self.state = "DEAD"
-            print(f"💀 {self.name} starved to death!")
-            return
-
-        # 4. State Machine: Wandering vs. Hunting
+        # 2. Prioritize Hunting
         if self.hunger >= HUNGER_THRESHOLD:
             self.state = "HUNTING"
-            self.move_towards_prey()
+            # Find prey (Any alive Herbivore or Insectivore)
+            prey_list = [e for e in entities if isinstance(e, (Herbivore, Insectivore)) and e.is_alive]
+            
+            if prey_list:
+                # Simple tracking: pick the first prey in the list
+                target = prey_list[0]
+                self.move_towards(target.x, target.y)
+                
+                # The Kill!
+                if self.x == target.x and self.y == target.y:
+                    target.die(f"Hunted by {self.name}")
+                    self.hunger = 0
+                    self.state = "WANDERING"
+                    print(f"🥩 {self.name} feasted on {target.name}!")
+            else:
+                self.move_randomly() # No prey found, keep wandering
         else:
             self.state = "WANDERING"
             self.move_randomly()
 
-    def move_randomly(self):
-        self.x += random.choice([-1, 0, 1])
-        self.y += random.choice([-1, 0, 1])
+# ==========================================
+# SPECIFIC ANIMALS (The easy part!)
+# ==========================================
+# Diurnal Herbivores
+class Zebra(Herbivore): pass
+class Elephant(Herbivore): pass
+class Giraffe(Herbivore): pass
+class Buffalo(Herbivore): pass
+class Rhino(Herbivore): pass
+class Antelope(Herbivore): pass
+class Ostrich(Herbivore): pass
+class Meerkat(Insectivore): pass
 
-    def move_towards_prey(self):
-        # If it has no prey, or the prey is already dead, just wander
-        if not self.target_prey or not self.target_prey.is_alive:
-            self.move_randomly()
-            return
+# Diurnal Carnivores
+class Lion(Carnivore): pass
+class Cheetah(Carnivore): pass
+
+# Nocturnal Animals (is_diurnal=False)
+class Leopard(Carnivore):
+    def __init__(self, entity_id, name, x, y):
+        super().__init__(entity_id, name, x, y, is_diurnal=False)
+
+class BushBaby(Insectivore):
+    def __init__(self, entity_id, name, x, y):
+        super().__init__(entity_id, name, x, y, is_diurnal=False)
+
+class Pangolin(Insectivore):
+    def __init__(self, entity_id, name, x, y):
+        super().__init__(entity_id, name, x, y, is_diurnal=False)
         
-        # Stalk the prey! Move 1 step closer on the X and Y axis
-        if self.x < self.target_prey.x: self.x += 1
-        elif self.x > self.target_prey.x: self.x -= 1
-        
-        if self.y < self.target_prey.y: self.y += 1
-        elif self.y > self.target_prey.y: self.y -= 1

@@ -7,12 +7,7 @@ class Entity:
         self.is_alive = True
         self.state = "IDLE"
 
-    def update(self):
-        """
-        This is the most important method. 
-        Every tick, the engine will call this.
-        Child classes (like Zebra) will override this with their specific logic.
-        """
+    def update(self, current_hour=0, entities=None):
         pass
 
     def __str__(self):

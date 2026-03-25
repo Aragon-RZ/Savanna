@@ -1,27 +1,43 @@
 # main.py
-import time
-from engine.builder import create_mvp_safari
+from engine.simulation import SimulationEngine
+from environment.nature import WateringHole
+from entities.animals import Zebra, Elephant, Lion, Leopard, BushBaby
 
 def main():
-    # 1. Build the world
-    safari_engine = create_mvp_safari()
+    # 1. Create the Engine (240 ticks = 10 full days!)
+    engine = SimulationEngine(max_ticks=240)
 
-    # 2. Start the simulation on a background thread
-    safari_engine.start() 
+    # 2. Create the Watering Hole 
+    main_water = WateringHole(name="Oasis", x=5, y=5, capacity=4)
+    engine.add_environment(main_water)
 
-    # 3. Keep the main program alive and listen for exit commands
-    try:
-        while True:
-            # The main thread just sleeps while the background thread does all the work
-            time.sleep(1) 
-    except KeyboardInterrupt:
-        # If the user presses Ctrl+C, gracefully stop the engine thread
-        safari_engine.stop()
-        safari_engine.join() # Wait for the thread to finish its last tick
-        print("Simulation terminated successfully.")
+    # 3. Spawn Herbivores (Daytime Wanderers)
+    herbivores = [
+        Zebra(1, "Zazu the Zebra", 2, 2),
+        Elephant(2, "Dumbo the Elephant", 8, 8),
+        Zebra(3, "Stripes the Zebra", 3, 2)
+    ]
+    
+    # 4. Spawn Predators
+    predators = [
+        Lion(4, "Mufasa the Lion", 0, 0),             # Hunts during the day
+        Leopard(5, "Shadow the Leopard", 10, 10)      # Hunts at night!
+    ]
+
+    # 5. Spawn Nocturnal Critters
+    nocturnal = [
+        BushBaby(6, "Blinky the BushBaby", 6, 6)
+    ]
+
+    # Add everyone to the engine and give them the water map
+    all_animals = herbivores + predators + nocturnal
+    for animal in all_animals:
+        animal.target_water = main_water
+        engine.add_entity(animal)
+
+    # 6. Start the simulation!
+    engine.start()
+    engine.join()
 
 if __name__ == "__main__":
     main()
-
-
-    #did i create a branch properly hihi? 

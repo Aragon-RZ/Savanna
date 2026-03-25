@@ -41,7 +41,8 @@ class SimulationEngine(threading.Thread):
             # 1. Update entities
             for entity in self.entities:
                 if entity.is_alive:
-                    entity.update(current_hour) 
+                    # Pass the master list of entities so predators can see prey!
+                    entity.update(current_hour, self.entities) 
                     
                     status_parts = [f"State: {entity.state}"]
                     if hasattr(entity, "thirst"):
