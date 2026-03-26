@@ -2,7 +2,7 @@
 # engine/simulation.py
 import time
 import threading
-from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR
+from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR, MAX_THIRST, MAX_HUNGER
 from utils.colors import Colors
 
 class SimulationEngine(threading.Thread):
@@ -42,12 +42,13 @@ class SimulationEngine(threading.Thread):
             # 1. Update entities
             for entity in self.entities:
                 if entity.is_alive:
-                    # Pass the master list of entities so predators can see prey!
                     entity.update(current_hour, self.entities) 
                     
-                    # --- NEW: Colorize the State ---
+                    # --- Colorize the State ---
                     if entity.state == "DEAD":
                         c_state = Colors.dead(entity.state)
+                    elif entity.state == "DESPERATE":  # <--- NEW Desperation state!
+                        c_state = Colors.desperate(entity.state)
                     elif entity.state == "SLEEPING":
                         c_state = f"{Colors.MAGENTA}{entity.state}{Colors.RESET}"
                     elif entity.state == "SEEKING_WATER":
@@ -59,13 +60,18 @@ class SimulationEngine(threading.Thread):
                     else:
                         c_state = f"{Colors.GREEN}{entity.state}{Colors.RESET}"
 
-                    # Build the status string
+                    # --- Build the Status String with Progress Bars ---
                     status_parts = [f"State: {c_state}"]
                     
                     if hasattr(entity, "thirst"):
-                        status_parts.insert(0, f"Thirst: {entity.thirst}/100")
+                        # Injecting the visual Thirst bar!
+                        bar = Colors.bar(entity.thirst, MAX_THIRST)
+                        status_parts.insert(0, f"Thirst: {bar} {entity.thirst}")
+                        
                     if hasattr(entity, "hunger"):
-                        status_parts.insert(0, f"Hunger: {entity.hunger}/100")
+                        # Injecting the visual Hunger bar!
+                        bar = Colors.bar(entity.hunger, MAX_HUNGER)
+                        status_parts.insert(0, f"Hunger: {bar} {entity.hunger}")
                         
                     print(f"   [{Colors.state(entity.name)} {entity.id}] @({entity.x}, {entity.y}) | " + " | ".join(status_parts))
 

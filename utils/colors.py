@@ -35,3 +35,21 @@ class Colors:
     @staticmethod
     def dead(text):
         return f"{Colors.RED}{text}{Colors.RESET}"
+    
+
+    @staticmethod
+    def bar(value, max_value=100, length=10):
+        """Generates a visual progress bar. Changes color if getting dangerously high."""
+        filled = int((value / max_value) * length)
+        empty = length - filled
+        bar_str = "█" * filled + "░" * empty
+        
+        if value >= 85: # Desperate
+            return f"{Colors.RED}[{bar_str}]{Colors.RESET}"
+        elif value >= 70: # Hungry/Thirsty
+            return f"{Colors.YELLOW}[{bar_str}]{Colors.RESET}"
+        return f"{Colors.GREEN}[{bar_str}]{Colors.RESET}"
+        
+    @staticmethod
+    def desperate(text):
+        return f"{Colors.RED}{Colors.YELLOW}{text}{Colors.RESET}"

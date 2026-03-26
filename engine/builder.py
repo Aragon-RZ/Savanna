@@ -1,39 +1,55 @@
 # engine/builder.py
+import random
 from engine.simulation import SimulationEngine
-from entities.animals import Lion, Zebra
 from environment.nature import WateringHole
+from entities.animals import Zebra, Elephant, Lion, Leopard, BushBaby
 
-def create_mvp_safari():
-    """Builds and wires together the starting state of the world."""
-    engine = SimulationEngine()
+class SafariBuilder:
+    def __init__(self, max_ticks=240):
+        self.engine = SimulationEngine(max_ticks=max_ticks)
+        self.water = None
+        self.animal_counter = 1
 
-    # Create the Environment
-    oasis = WateringHole(name="Main Oasis", x=5, y=5, capacity=2)
-    engine.add_environment(oasis)
+    def build_environment(self):
+        """Creates the stationary locations like the Watering Hole."""
+        self.water = WateringHole(name="Oasis", x=5, y=5, capacity=4)
+        self.engine.add_environment(self.water)
+        return self
 
-    # Create the Actors
-    z1 = Zebra(entity_id= '001', name="Zebra-Alpha", x=3, y=3)
-    z2 = Zebra(entity_id= '002', name="Zebra-Beta", x=7, y=5)
-    z3 = Zebra(entity_id= '003', name="Zebra-Gina", x=5, y=7)
+    def _spawn_batch(self, animal_class, base_name, count, start_x, start_y):
+        """Helper method to spawn a group of animals with a slight random spread."""
+        for i in range(count):
+            # Spread them out slightly so they don't all stack on the exact same coordinate
+            x = start_x + random.randint(-2, 2)
+            y = start_y + random.randint(-2, 2)
+            
+            animal = animal_class(self.animal_counter, f"{base_name} {i+1}", x, y)
+            animal.target_water = self.water
+            self.engine.add_entity(animal)
+            self.animal_counter += 1
 
-    # Fast-forward thirst for testing
-    z1.thirst = 68
-    z2.thirst = 69
-    z3.thirst = 67
+    # --- Animal Spawners ---
+    
+    def add_zebras(self, count):
+        self._spawn_batch(Zebra, "Zebra", count, start_x=2, start_y=2)
+        return self
+        
+    def add_elephants(self, count):
+        self._spawn_batch(Elephant, "Elephant", count, start_x=8, start_y=8)
+        return self
 
-    # Give them GPS coordinates to the water
-    z1.target_water = oasis
-    z2.target_water = oasis
-    z3.target_water = oasis
+    def add_lions(self, count):
+        self._spawn_batch(Lion, "Lion", count, start_x=0, start_y=0)
+        return self
 
-    # Add to engine
-    engine.add_entity(z1)
-    engine.add_entity(z2)
-    engine.add_entity(z3)
+    def add_leopards(self, count):
+        self._spawn_batch(Leopard, "Leopard", count, start_x=10, start_y=10)
+        return self
 
-    # Create a hungry Lion right next to the Zebras
-    mufasa = Lion(entity_id=99, name="Lion-Mufasa", x=4, y=4)
-    mufasa.hunger = 69  # Start hunting on the first tick
-    engine.add_entity(mufasa)
+    def add_bushbabies(self, count):
+        self._spawn_batch(BushBaby, "BushBaby", count, start_x=6, start_y=6)
+        return self
 
-    return engine
+    def get_engine(self):
+        """Returns the fully constructed and populated engine."""
+        return self.engine

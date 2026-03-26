@@ -8,6 +8,7 @@
 import random
 from entities.base import Entity
 from utils.constants import THIRST_THRESHOLD, MAX_THIRST, SUNRISE_HOUR, SUNSET_HOUR, MAX_HUNGER, HUNGER_THRESHOLD
+from utils.constants import DESPERATION_THRESHOLD 
 
 # ==========================================
 # BASE ANIMAL LOGIC
@@ -29,10 +30,21 @@ class Animal(Entity):
         if not self.is_alive:
             return
 
+        # 0. Check for Desperation!
+        is_desperate = self.thirst >= DESPERATION_THRESHOLD or self.hunger >= DESPERATION_THRESHOLD
+
         # 1. Sleep Cycle
         is_daytime = SUNRISE_HOUR <= current_hour < SUNSET_HOUR
         should_be_awake = is_daytime if self.is_diurnal else not is_daytime
         
+        # --- DESPERATION OVERRIDE ---
+        if is_desperate:
+            should_be_awake = True  # Panic wakes them up!
+            if self.state == "SLEEPING":
+                print(f"⚠️ {self.name} woke up in a panic due to extreme thirst/hunger!")
+                self.state = "DESPERATE"
+
+        # Normal sleep logic
         if not should_be_awake and self.state not in ["SLEEPING", "DRINKING"]:
             self.state = "SLEEPING"
             print(f"💤 {self.name} went to sleep.")
@@ -40,7 +52,7 @@ class Animal(Entity):
             self.state = "WANDERING"
             print(f"☀️/🌙 {self.name} woke up.")
 
-        # 2. Survival Stats (Skip movement if sleeping/drinking)
+        # 2. Survival Stats 
         self.thirst += 2
         self.hunger += 1
         
