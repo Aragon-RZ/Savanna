@@ -3,6 +3,7 @@
 import time
 import threading
 from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR
+from utils.colors import Colors
 
 class SimulationEngine(threading.Thread):
     def __init__(self, max_ticks=50):
@@ -44,10 +45,29 @@ class SimulationEngine(threading.Thread):
                     # Pass the master list of entities so predators can see prey!
                     entity.update(current_hour, self.entities) 
                     
-                    status_parts = [f"State: {entity.state}"]
+                    # --- NEW: Colorize the State ---
+                    if entity.state == "DEAD":
+                        c_state = Colors.dead(entity.state)
+                    elif entity.state == "SLEEPING":
+                        c_state = f"{Colors.MAGENTA}{entity.state}{Colors.RESET}"
+                    elif entity.state == "SEEKING_WATER":
+                        c_state = f"{Colors.CYAN}{entity.state}{Colors.RESET}"
+                    elif entity.state == "DRINKING":
+                        c_state = f"{Colors.BLUE}{entity.state}{Colors.RESET}"
+                    elif entity.state == "HUNTING":
+                        c_state = f"{Colors.RED}{entity.state}{Colors.RESET}"
+                    else:
+                        c_state = f"{Colors.GREEN}{entity.state}{Colors.RESET}"
+
+                    # Build the status string
+                    status_parts = [f"State: {c_state}"]
+                    
                     if hasattr(entity, "thirst"):
                         status_parts.insert(0, f"Thirst: {entity.thirst}/100")
-                    print(f"   [{entity.name} {entity.id}] @({entity.x}, {entity.y}) | " + " | ".join(status_parts))
+                    if hasattr(entity, "hunger"):
+                        status_parts.insert(0, f"Hunger: {entity.hunger}/100")
+                        
+                    print(f"   [{Colors.state(entity.name)} {entity.id}] @({entity.x}, {entity.y}) | " + " | ".join(status_parts))
 
                 # 2. Handle Environment Interactions
                 for env in self.environments:
