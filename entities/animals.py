@@ -15,8 +15,8 @@ from utils.colors import Colors
 class Animal(Entity):
     def __init__(self, entity_id, name, x, y, is_diurnal=True):
         super().__init__(entity_id, name, x, y)
-        self.thirst = 0
-        self.hunger = 0
+        self.thirst = 40
+        self.hunger = 50
         self.target_water = None
         self.is_diurnal = is_diurnal
 
@@ -93,6 +93,15 @@ class Insectivore(Herbivore):
     pass # Behaves exactly like a herbivore, just eats bugs instead of grass
 
 class Carnivore(Animal):
+
+    def try_to_hunt(self, prey):
+        if self.x == prey.x and self.y == prey.y:
+            prey.die(f"Hunted by {self.name}")
+            self.hunger = 0
+            self.state = "WANDERING"
+            print(f"🥩 {self.name} feasted on {prey.name}!")
+
+        
     def act(self, entities):
         # 1. Prioritize Water
         if self.thirst >= THIRST_THRESHOLD and self.target_water:
@@ -112,11 +121,7 @@ class Carnivore(Animal):
                 self.move_towards(target.x, target.y)
                 
                 # The Kill!
-                if self.x == target.x and self.y == target.y:
-                    target.die(f"Hunted by {self.name}")
-                    self.hunger = 0
-                    self.state = "WANDERING"
-                    print(f"🥩 {self.name} feasted on {target.name}!")
+                self.try_to_hunt(target)
             else:
                 self.move_randomly() # No prey found, keep wandering
         else:

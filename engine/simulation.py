@@ -49,6 +49,7 @@ class SimulationEngine(threading.Thread):
                     status_parts = [f"State: {Colors.state(entity.state)}"]
                     if hasattr(entity, "thirst"):
                         status_parts.insert(0, f"Thirst: {Colors.thirst(f'{entity.thirst}/100')}")
+
                     if isinstance(entity, Carnivore) and hasattr(entity, "hunger"):
                         status_parts.insert(0, f"Hunger: {Colors.hunger(f'{entity.hunger}/100')}")
                     position_str = Colors.position(f"@({entity.x}, {entity.y})")
@@ -64,11 +65,6 @@ class SimulationEngine(threading.Thread):
                     if entity.state in ["SEEKING_WATER", "WAITING_IN_LINE"]:
                         if entity.x == env.x and entity.y == env.y:
                             env.try_to_drink(entity)
-
-                    if entity.state == "HUNTING":
-                        for potential_prey in self.entities:
-                            if potential_prey.is_alive and potential_prey != entity:
-                                env.try_to_hunt(predator=entity, prey=potential_prey)
 
             # 3. Stop condition
             if self.tick_count >= self.max_ticks:

@@ -4,6 +4,7 @@ from environment.nature import WateringHole
 from entities.animals import Zebra, Elephant, Lion, Leopard, BushBaby
 from engine.builder import create_mvp_safari
 
+
 def main():
     # 1. Create the Engine (240 ticks = 10 full days!)
     engine = SimulationEngine(max_ticks=240)
