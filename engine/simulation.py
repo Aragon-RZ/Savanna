@@ -63,6 +63,8 @@ class SimulationEngine(threading.Thread):
                         c_state = f"{Colors.BLUE}{entity.state}{Colors.RESET}"
                     elif entity.state == "HUNTING":
                         c_state = f"{Colors.RED}{entity.state}{Colors.RESET}"
+                    elif entity.state == "FLEEING":
+                        c_state = f"{Colors.RED}{entity.state}{Colors.RESET}"
                     else:
                         c_state = f"{Colors.GREEN}{entity.state}{Colors.RESET}"
 
