@@ -3,6 +3,7 @@
 import time
 import threading
 from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR
+from utils.colors import Colors
 
 class SimulationEngine(threading.Thread):
     def __init__(self, max_ticks=50):
@@ -44,10 +45,11 @@ class SimulationEngine(threading.Thread):
                     # Pass the master list of entities so predators can see prey!
                     entity.update(current_hour, self.entities) 
                     
-                    status_parts = [f"State: {entity.state}"]
+                    status_parts = [f"State: {Colors.state(entity.state)}"]
                     if hasattr(entity, "thirst"):
-                        status_parts.insert(0, f"Thirst: {entity.thirst}/100")
-                    print(f"   [{entity.name} {entity.id}] @({entity.x}, {entity.y}) | " + " | ".join(status_parts))
+                        status_parts.insert(0, f"Thirst: {Colors.thirst(f'{entity.thirst}/100')}")
+                    position_str = Colors.position(f"@({entity.x}, {entity.y})")
+                    print(f"   [{entity.name} {entity.id}] {position_str} | " + " | ".join(status_parts))
 
                 # 2. Handle Environment Interactions
                 for env in self.environments:
