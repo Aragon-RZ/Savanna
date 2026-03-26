@@ -1,0 +1,12 @@
+# .gitignore
+
+venv/
+__pycache__/
+*.pyc
+*.cpython-*
+*.pyo
+*.pyd
+*.log
+*.tmp
+.DS_Store
+*.cpython-*.pcy
