@@ -1,6 +1,6 @@
 # environment/nature.py
 import threading
-
+from utils.colors import Colors
 class WateringHole:
     def __init__(self, name, x, y, capacity=3):
         self.name = name
@@ -18,15 +18,15 @@ class WateringHole:
         if self.spots.acquire(blocking=False):
             entity.state = "DRINKING"
             self.current_drinkers.append(entity)
-            print(f"💧 {entity.name} found a spot and started drinking at {self.name}!")
+            print(f"💧 {Colors.state(entity.name)} found a spot and started drinking at {self.name}!")
             return True
         else:
             entity.state = "WAITING_IN_LINE"
-            print(f"⏳ {entity.name} is waiting in line. The {self.name} is full.")
+            print(f"⏳ {Colors.state(entity.name)} is waiting in line. The {self.name} is full.")
             return False
 
     def finish_drinking(self, entity):
         if entity in self.current_drinkers:
             self.current_drinkers.remove(entity)
             self.spots.release()
-            print(f"✅ {entity.name} finished drinking and freed up a spot.")
+            print(f"✅ {Colors.state(entity.name)} finished drinking and freed up a spot.")

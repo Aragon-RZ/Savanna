@@ -8,7 +8,7 @@
 import random
 from entities.base import Entity
 from utils.constants import THIRST_THRESHOLD, MAX_THIRST, SUNRISE_HOUR, SUNSET_HOUR, MAX_HUNGER, HUNGER_THRESHOLD
-
+from utils.colors import Colors
 # ==========================================
 # BASE ANIMAL LOGIC
 # ==========================================
