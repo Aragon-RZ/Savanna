@@ -1,6 +1,6 @@
 # engine/builder.py
 from engine.simulation import SimulationEngine
-from entities.animals import Lion, Zebra
+from entities.animals import BushBaby, Leopard, Leopard, Lion, Zebra
 from environment.nature import WateringHole
 
 def create_mvp_safari():
@@ -35,5 +35,15 @@ def create_mvp_safari():
     mufasa = Lion(entity_id=99, name="Lion-Mufasa", x=4, y=4)
     mufasa.hunger = 69  # Start hunting on the first tick
     engine.add_entity(mufasa)
+
+    #create some nocturnal animals as well
+    leo = Leopard(entity_id=100, name="Leopard-Leo", x=6, y=6)
+    blinky = BushBaby(entity_id=101, name="Blinky the BushBaby", x=8, y=8)
+
+
+    
+    engine.add_entity(leo)
+    engine.add_entity(blinky)
+    
 
     return engine

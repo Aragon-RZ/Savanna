@@ -4,6 +4,7 @@ import time
 import threading
 from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR
 from utils.colors import Colors
+from entities.animals import Carnivore
 
 class SimulationEngine(threading.Thread):
     def __init__(self, max_ticks=50):
@@ -48,9 +49,11 @@ class SimulationEngine(threading.Thread):
                     status_parts = [f"State: {Colors.state(entity.state)}"]
                     if hasattr(entity, "thirst"):
                         status_parts.insert(0, f"Thirst: {Colors.thirst(f'{entity.thirst}/100')}")
+                    if isinstance(entity, Carnivore) and hasattr(entity, "hunger"):
+                        status_parts.insert(0, f"Hunger: {Colors.hunger(f'{entity.hunger}/100')}")
                     position_str = Colors.position(f"@({entity.x}, {entity.y})")
                     print(f"   [{entity.name} {entity.id}] {position_str} | " + " | ".join(status_parts))
-
+                    
                 # 2. Handle Environment Interactions
                 for env in self.environments:
                     # Check if animal finished drinking
@@ -61,6 +64,11 @@ class SimulationEngine(threading.Thread):
                     if entity.state in ["SEEKING_WATER", "WAITING_IN_LINE"]:
                         if entity.x == env.x and entity.y == env.y:
                             env.try_to_drink(entity)
+
+                    if entity.state == "HUNTING":
+                        for potential_prey in self.entities:
+                            if potential_prey.is_alive and potential_prey != entity:
+                                env.try_to_hunt(predator=entity, prey=potential_prey)
 
             # 3. Stop condition
             if self.tick_count >= self.max_ticks:
