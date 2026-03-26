@@ -54,6 +54,8 @@ class Colors:
     def desperate(text):
         return f"{Colors.RED}{Colors.YELLOW}{text}{Colors.RESET}"
     
+    def fleeing(text):
+        return f"{Colors.RED}{text}{Colors.RESET}"
 
    #A static method is a method that belongs to a class but doesn’t use or depend on instance data 
 
