@@ -37,12 +37,12 @@ class Colors:
         return f"{Colors.RED}{text}{Colors.RESET}"
     
 
-    @staticmethod
+    @staticmethod     
     def bar(value, max_value=100, length=10):
         """Generates a visual progress bar. Changes color if getting dangerously high."""
-        filled = int((value / max_value) * length)
+        filled = int((value / max_value) * length) # Calculate how much of the bar should be filled
         empty = length - filled
-        bar_str = "█" * filled + "░" * empty
+        bar_str = "█" * filled + "░" * empty   # Build the bar using characters
         
         if value >= 85: # Desperate
             return f"{Colors.RED}[{bar_str}]{Colors.RESET}"
@@ -53,3 +53,11 @@ class Colors:
     @staticmethod
     def desperate(text):
         return f"{Colors.RED}{Colors.YELLOW}{text}{Colors.RESET}"
+    
+
+   #A static method is a method that belongs to a class but doesn’t use or depend on instance data 
+
+#Static methods in the Colors class because these functions don’t depend on any 
+# specific object. They simply take input, like text or values, 
+# and return a formatted version. Allowing to group all display-related utilities 
+# in one place while keeping them easy to call and reusable.

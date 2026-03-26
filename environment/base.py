@@ -1,6 +1,6 @@
-# entities/base.py
 
-class Entity:
+
+class Entity: #Base class for anything that exists in the simulation. (all animals inherit from this class) 
     def __init__(self, entity_id, name, x=0, y=0):
         self.id = entity_id
         self.name = name

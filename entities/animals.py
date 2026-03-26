@@ -4,7 +4,6 @@
 # every tick to simulate their actions and interactions with the environment.
 
 
-# entities/animals.py
 import random
 from entities.base import Entity
 from utils.constants import THIRST_THRESHOLD, MAX_THIRST, SUNRISE_HOUR, SUNSET_HOUR, MAX_HUNGER, HUNGER_THRESHOLD
@@ -18,8 +17,8 @@ class Animal(Entity):
         super().__init__(entity_id, name, x, y)
         self.thirst = 0
         self.hunger = 0
-        self.target_water = None
-        self.is_diurnal = is_diurnal
+        self.target_water = None #shared resource animals can move toward
+        self.is_diurnal = is_diurnal  
 
     def die(self, cause):
         self.is_alive = False
@@ -35,7 +34,7 @@ class Animal(Entity):
 
         # 1. Sleep Cycle
         is_daytime = SUNRISE_HOUR <= current_hour < SUNSET_HOUR
-        should_be_awake = is_daytime if self.is_diurnal else not is_daytime
+        should_be_awake = is_daytime if self.is_diurnal else not is_daytime #diurnal animals awake during day 
         
         # --- DESPERATION OVERRIDE ---
         if is_desperate:
@@ -56,6 +55,7 @@ class Animal(Entity):
         self.thirst += 2
         self.hunger += 1
         
+        #death conditions 
         if self.thirst >= MAX_THIRST:
             self.die("Extreme Thirst")
             return

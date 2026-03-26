@@ -1,5 +1,5 @@
 
-# engine/simulation.py
+
 import time
 import threading
 from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR, MAX_THIRST, MAX_HUNGER
@@ -8,10 +8,10 @@ from utils.colors import Colors
 class SimulationEngine(threading.Thread):
     def __init__(self, max_ticks=50):
         super().__init__()
-        self.tick_count = 0
+        self.tick_count = 0 #tracks how many ticks have passed 
         self.max_ticks = max_ticks
-        self.is_running = False
-        self.entities = []
+        self.is_running = False #controls wether the simulaition loop is running 
+        self.entities = [] #all animals / entities in the simulaiton 
         self.environments = []
 
     def add_entity(self, entity):
@@ -27,7 +27,12 @@ class SimulationEngine(threading.Thread):
         print("="*40 + "\n")
         
         while self.is_running:
-            self.tick_count += 1
+            self.tick_count += 1 #move time forward 
+            #while running, update everything and wait a bit - represents one moment in time : tick 
+            #first, we advance time and calculate the current hour, which drives the day and night cycle.
+            #then, we update every animal in the system — this is where they move, get thirsty or hungry, hunt, drink, or sleep depending on their state.
+            #after that, we handle interactions with the environment, like animals accessing the watering hole or waiting if it’s full.
+            #finally, we display the current state in the terminal and pause briefly before repeating
             
             # --- DAY/NIGHT CLOCK ---
             current_hour = self.tick_count % TICKS_PER_DAY
@@ -42,7 +47,8 @@ class SimulationEngine(threading.Thread):
             # 1. Update entities
             for entity in self.entities:
                 if entity.is_alive:
-                    entity.update(current_hour, self.entities) 
+                    entity.update(current_hour, self.entities)  #Update the animal (pass time + all entities for interactions like hunting)
+                  
                     
                     # --- Colorize the State ---
                     if entity.state == "DEAD":
