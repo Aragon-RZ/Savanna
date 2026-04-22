@@ -102,6 +102,9 @@ class WeatherSystem:
         
         # Update multipliers
         self._update_effects()
+        
+        # Log to database
+        self._log_weather(tick)
     
     def _transition_season(self):
         """Transition to next season"""
@@ -216,6 +219,19 @@ class WeatherSystem:
             parts.append(f"Event: {self.current_event.value}")
         
         return ", ".join(parts)
+    
+    def _log_weather(self, tick: int):
+        """Log weather to database"""
+        try:
+            from engine.database import DatabaseManager
+            DatabaseManager.log_event(
+                tick=tick,
+                entity_id=None,
+                event_type="WEATHER",
+                details=f"season={self.season.value},event={self.current_event.value},temp={self.temperature:.1f}"
+            )
+        except:
+            pass  # Silently fail if database not available
     
     def __str__(self):
         return f"Weather({self.season.value}, {self.current_event.value})"

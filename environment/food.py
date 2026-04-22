@@ -105,15 +105,24 @@ class FoodSource:
             return True
         return False
     
-    def regrow(self):
+    def regrow(self, weather_multiplier: float = 1.0):
         """
-        Regrow food over time.
+        Regrow food over time, affected by weather.
         
         Food regrows incrementally each tick. When enough
-        accumulates, quantity increases.
+        accumulates, quantity increases. Weather multiplier
+        affects regrowth speed:
+        - 1.0 = normal (neutral weather)
+        - 2.0 = double (rain, good conditions)
+        - 0.5 = half speed (drought)
+        
+        Args:
+            weather_multiplier: Weather effect on regrowth (default 1.0)
         """
         if self.quantity < self.max_quantity:
-            self.regrow_counter += 1
+            # Apply weather multiplier - accelerate regrowth in good conditions
+            self.regrow_counter += weather_multiplier
+            
             if self.regrow_counter >= self.regrow_rate:
                 # Time to regrow some food
                 regrow_amount = max(1, self.max_quantity // 10)  # 10% of max
@@ -361,10 +370,10 @@ class FoodManager:
                 found.append(source)
         return found
     
-    def regrow_all(self):
-        """Regrow all food sources (call each tick)"""
+    def regrow_all(self, weather_multiplier: float = 1.0):
+        """Regrow all food sources with weather effect (call each tick)"""
         for source in self.sources:
-            source.regrow()
+            source.regrow(weather_multiplier)
     
     def get_food_stats(self) -> dict:
         """

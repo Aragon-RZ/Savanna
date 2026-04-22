@@ -5,6 +5,7 @@ import threading
 from collections import defaultdict
 from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR, MAX_THIRST, MAX_HUNGER
 from utils.colors import Colors
+from engine.weather import WeatherSystem
 
 class SimulationEngine(threading.Thread):
     def __init__(self, max_ticks=50):
@@ -15,6 +16,7 @@ class SimulationEngine(threading.Thread):
         self.entities = [] #all animals / entities in the simulaiton 
         self.environments = []
         self.food_manager = None  # NEW: Food manager reference
+        self.weather_system = WeatherSystem()  # NEW: Weather system
         
         # Stats tracking
         self.stats = {
@@ -81,9 +83,13 @@ class SimulationEngine(threading.Thread):
 
                 print(f"--- ⏰ Tick {self.tick_count} | Hour: {current_hour}:00 ---")
                 
-                # NEW: Regrow food sources
+                # NEW: Update weather system
+                self.weather_system.update(self.tick_count)
+                weather_multiplier = self.weather_system.food_regrow_rate
+                
+                # NEW: Regrow food sources with weather effect
                 if self.food_manager:
-                    self.food_manager.regrow_all()
+                    self.food_manager.regrow_all(weather_multiplier)
                 
                 # NEW: Update reproduction cooldowns
                 if hasattr(self, 'reproduction_manager') and self.reproduction_manager:
