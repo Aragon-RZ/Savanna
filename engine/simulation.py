@@ -13,12 +13,21 @@ class SimulationEngine(threading.Thread):
         self.is_running = False #controls wether the simulaition loop is running 
         self.entities = [] #all animals / entities in the simulaiton 
         self.environments = []
+        self.food_manager = None  # NEW: Food manager reference
 
     def add_entity(self, entity):
         self.entities.append(entity)
         
     def add_environment(self, environment):
         self.environments.append(environment)
+    
+    def set_food_manager(self, food_manager):
+        """Set the food manager for this simulation"""
+        self.food_manager = food_manager
+    
+    def set_reproduction_manager(self, reproduction_manager):
+        """Set the reproduction manager for this simulation"""
+        self.reproduction_manager = reproduction_manager
 
     def run(self):
         self.is_running = True
@@ -31,7 +40,7 @@ class SimulationEngine(threading.Thread):
             #while running, update everything and wait a bit - represents one moment in time : tick 
             #first, we advance time and calculate the current hour, which drives the day and night cycle.
             #then, we update every animal in the system — this is where they move, get thirsty or hungry, hunt, drink, or sleep depending on their state.
-            #after that, we handle interactions with the environment, like animals accessing the watering hole or waiting if it’s full.
+            #after that, we handle interactions with the environment, like animals accessing the watering hole or waiting if it's full.
             #finally, we display the current state in the terminal and pause briefly before repeating
             
             # --- DAY/NIGHT CLOCK ---
@@ -44,11 +53,23 @@ class SimulationEngine(threading.Thread):
 
             print(f"--- ⏰ Tick {self.tick_count} | Hour: {current_hour}:00 ---")
             
+            # NEW: Regrow food sources
+            if self.food_manager:
+                self.food_manager.regrow_all()
+            
+            # NEW: Update reproduction cooldowns
+            if hasattr(self, 'reproduction_manager') and self.reproduction_manager:
+                self.reproduction_manager.tick_cooldowns()
+            
             # 1. Update entities
             for entity in self.entities:
                 if entity.is_alive:
+                    # Store current tick for logging
+                    if hasattr(entity, 'current_tick'):
+                        entity.current_tick = self.tick_count
+                    
                     entity.update(current_hour, self.entities)  #Update the animal (pass time + all entities for interactions like hunting)
-                  
+                   
                     
                     # --- Colorize the State ---
                     if entity.state == "DEAD":
@@ -61,6 +82,8 @@ class SimulationEngine(threading.Thread):
                         c_state = f"{Colors.CYAN}{entity.state}{Colors.RESET}"
                     elif entity.state == "DRINKING":
                         c_state = f"{Colors.BLUE}{entity.state}{Colors.RESET}"
+                    elif entity.state == "EATING":  # NEW: Eating state color
+                        c_state = f"{Colors.GREEN}{entity.state}{Colors.RESET}"
                     elif entity.state == "HUNTING":
                         c_state = f"{Colors.RED}{entity.state}{Colors.RESET}"
                     elif entity.state == "FLEEING":
@@ -93,6 +116,11 @@ class SimulationEngine(threading.Thread):
                     if entity.state in ["SEEKING_WATER", "WAITING_IN_LINE"]:
                         if entity.x == env.x and entity.y == env.y:
                             env.try_to_drink(entity)
+                
+                # NEW: Handle food interactions for herbivores
+                if entity.state == "EATING" and hasattr(entity, "target_food"):
+                    # Eating state handles food in the state itself
+                    pass
 
             # 3. Stop condition
             if self.tick_count >= self.max_ticks:

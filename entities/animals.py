@@ -1,232 +1,345 @@
-# These are the classes for the animals in our simulation.
-# Each animal will have its own unique behaviors and states.
-#  The Engine will call the `update()` method of each animal 
-# every tick to simulate their actions and interactions with the environment.
+"""
+Animal Classes - Fauna of the Savanna
 
+This module contains all animal types in the simulation.
 
-import random
-import time
+Design Patterns Used:
+1. STATE PATTERN: Each animal delegates behavior to a State object
+   - States encapsulate behavioral logic
+   - Animals transition between states
+   - States handle entry/exit actions
+   
+2. STRATEGY PATTERN: Movement and hunting use strategy objects
+   - movement_strategy: How the animal moves
+   - hunting_strategy: How carnivores hunt (only for carnivores)
+
+State Transitions:
+    IDLE → WANDERING (initial update)
+    WANDERING → SLEEPING (inactive hours)
+    WANDERING → SEEKING_WATER (thirst threshold)
+    SEEKING_WATER → DRINKING (at water source)
+    DRINKING → WANDERING (finished drinking)
+    WANDERING → FLEEING (predator spotted)
+    FLEEING → WANDERING (escaped)
+    WANDERING → HUNTING (carnivore hungry)
+    HUNTING → WANDERING (caught prey or gave up)
+    ANY → DESPERATE (critical survival)
+    DESPERATE → WANDERING (recovered)
+
+Strategy Selection:
+    Herbivores: RandomWalkStrategy (default), HerdFollowStrategy (herd animals)
+    Carnivores: +HuntingStrategy (SimpleChaseStrategy)
+"""
+
 from entities.base import Entity
-from utils.constants import THIRST_THRESHOLD, MAX_THIRST, SUNRISE_HOUR, SUNSET_HOUR, MAX_HUNGER, HUNGER_THRESHOLD
-from utils.constants import DESPERATION_THRESHOLD 
+from utils.constants import (
+    THIRST_THRESHOLD, MAX_THIRST, SUNRISE_HOUR, SUNSET_HOUR, 
+    MAX_HUNGER, HUNGER_THRESHOLD, DESPERATION_THRESHOLD
+)
 from utils.colors import Colors
-# ==========================================
-# BASE ANIMAL LOGIC
-# ==========================================
+from entities.behaviors.movement.random_walk import RandomWalkStrategy
+from entities.behaviors.movement.herd_follow import HerdFollowStrategy
+from entities.behaviors.hunting.simple_chase import SimpleChaseStrategy
+
+
 class Animal(Entity):
+    """
+    Base class for all animals.
+    
+    Animals extend Entity with survival needs (thirst, hunger)
+    and behavioral properties (is_diurnal, is_herd_animal).
+    
+    State Pattern Integration:
+        - Animals use State objects for all behavior
+        - The update() method delegates to current state
+        - States handle entry/exit actions
+        
+    Strategy Pattern Integration:
+        - movement_strategy: How the animal moves (default: RandomWalk)
+        - hunting_strategy: How carnivores hunt (default: SimpleChase)
+        
+    Observer Pattern Integration:
+        - die() in Entity base class emits ENTITY_DIED event
+        - State transitions emit STATE_CHANGED events
+    """
+    
     def __init__(self, entity_id, name, x, y, is_diurnal=True):
+        """
+        Initialize an animal.
+        
+        Args:
+            entity_id: Unique identifier
+            name: Display name
+            x: Starting X position
+            y: Starting Y position
+            is_diurnal: True for day-active, False for night-active
+        """
         super().__init__(entity_id, name, x, y)
+        
+        # Survival needs
         self.thirst = 0
         self.hunger = 0
-        self.target_water = None #shared resource animals can move toward
-        self.is_diurnal = is_diurnal  
-
-    def die(self, cause):
-        self.is_alive = False
-        self.state = "DEAD"
-        print(f"💀 {self.name} died! Cause: {cause}.")
-
+        self.target_water = None
+        
+        # Behavioral properties
+        self.is_diurnal = is_diurnal
+        
+        # STRATEGY PATTERN: Initialize with default strategies
+        # These can be changed at runtime for different behaviors
+        self.movement_strategy = RandomWalkStrategy()
+        self.hunting_strategy = SimpleChaseStrategy()
+        
+        # OBSERVER PATTERN: Emit birth event
+        try:
+            from engine.events import EventManager, EventType
+            EventManager.emit(EventType.ENTITY_BORN, {
+                'entity': self
+            })
+        except ImportError:
+            pass
+    
     def update(self, current_hour, entities):
+        """
+        Update the animal for one simulation tick.
+        
+        The STATE PATTERN in action:
+        1. Check if alive (dead animals don't update)
+        2. Increment survival needs
+        3. Check for death conditions
+        4. Delegate remaining behavior to current state
+        
+        Args:
+            current_hour: Current time in simulation (0-23)
+            entities: List of all entities (for interactions)
+        """
         if not self.is_alive:
             return
         
-        # 0. Check for Desperation!
-        is_desperate = self.thirst >= DESPERATION_THRESHOLD or self.hunger >= DESPERATION_THRESHOLD
-
-        # 1. Sleep Cycle
-        is_daytime = SUNRISE_HOUR <= current_hour < SUNSET_HOUR
-        should_be_awake = is_daytime if self.is_diurnal else not is_daytime
-
-        if is_desperate:
-            should_be_awake = True
-            if self.state == "SLEEPING":
-                print(f"⚠️ {self.name} woke up in a panic due to extreme thirst/hunger!")
-                self.state = "DESPERATE"
-
-        if not should_be_awake and self.state not in ["SLEEPING", "DRINKING"]:
-            self.state = "SLEEPING"
-            print(f"💤 {self.name} went to sleep.")
-        elif should_be_awake and self.state == "SLEEPING":
-            self.state = "WANDERING"
-            print(f"☀️/🌙 {self.name} woke up.")
-
-        # 2. Survival Stats
+        # Increment survival needs
         self.thirst += 2
-        self.hunger += 1
+        # Use class-specific hunger rate if available, else default
+        self.hunger += getattr(self, 'hunger_rate', 1)
         
+        # Check survival (death from thirst/hunger)
         if self.thirst >= MAX_THIRST:
             self.die("Extreme Thirst")
             return
         if self.hunger >= MAX_HUNGER:
             self.die("Starvation")
             return
-
-        if self.state in ["SLEEPING", "DRINKING"]:
-            if self.state == "DRINKING":
-                self.thirst -= 25
-                if self.thirst <= 0:
-                    self.thirst = 0
-                    self.state = "WANDERING"
-            return
-
-        # 3. Let the specific animal decide what to do!
-        self.act(entities)
+        
+        # STATE PATTERN: Delegate all behavior to current state
+        # The state object handles:
+        # - What to do this tick
+        # - When to transition to a new state
+        super().update(current_hour, entities)
+    
+    # STRATEGY PATTERN: Helper methods for strategies
+    
+    def set_movement_strategy(self, strategy):
+        """
+        Change the animal's movement strategy at runtime.
+        
+        Usage:
+            from entities.behaviors import HerdFollowStrategy
+            animal.set_movement_strategy(HerdFollowStrategy())
+            
+        Args:
+            strategy: A MovementStrategy instance
+        """
+        self.movement_strategy = strategy
+    
+    def set_hunting_strategy(self, strategy):
+        """
+        Change the animal's hunting strategy at runtime.
+        
+        Only applies to carnivores.
+        
+        Args:
+            strategy: A HuntingStrategy instance
+        """
+        self.hunting_strategy = strategy
     
     def herd(self, herd_animal: bool):
-        while herd_animal:
-            self.move_with_herd()
-            time.sleep(1)
-
-    def move_with_herd(self):        # Logic to move with the herd (e.g., follow the nearest herbivore)
-        herd = [] #this would be the herd of animals that will move together, for example, a herd of zebras.
-                #  The logic to determine which animals are in the herd and how they move together would be implemented here.
-
-        if herd:
-            # Move towards the average position of the herd
-            avg_x = sum(animal.x for animal in herd) / len(herd)
-            avg_y = sum(animal.y for animal in herd) / len(herd)
-            self.move_towards(avg_x, avg_y)
-
-    def join_herd(self, herd_animal: bool, herd: list):
-        if random.random() < 0.45:  # 50% chance to join the herd
-            self.herd(herd_animal)
-            herd.append(self)  # Add this animal to the herd list
-            print(f"🐾 {self.name} has joined the herd!")
-
-    def act(self, entities):
-        pass # Overridden by Herbivore/Carnivore
-
-    def move_randomly(self):
-        self.x += random.choice([-1, 0, 1])
-        self.y += random.choice([-1, 0, 1])
-
-    def move_towards(self, target_x, target_y):
-        if self.x < target_x: self.x += 1
-        elif self.x > target_x: self.x -= 1
-        if self.y < target_y: self.y += 1
-        elif self.y > target_y: self.y -= 1
-
-# ==========================================
-# DIET TYPES (The Logic)
-# ==========================================
-class Herbivore(Animal):
-    def act(self, entities):
-        """The main decision engine for herbivores."""
-        self.hunger = 0 # Grass is everywhere, they don't starve for now
+        """
+        Enable or disable herd following behavior.
         
-        # 1. Survival: Check for danger first
-        closest_predator = self._scan_for_predators(entities)
-        if closest_predator:
-            self.state = "FLEEING"
-            self.escape_predator(closest_predator)
-            return
-
-        # 2. Survival: Check for thirst
-        if self._handle_thirst():
-            return
-
-        # 3. Social: Move with the herd or wander
-        self._handle_herding(entities)
-
-    # --- INTERNAL HELPER FUNCTIONS ---
-
-    def _scan_for_predators(self, entities):
-        """Scans the map and returns the closest predator within 4 spaces, or None."""
-        predators = [e for e in entities if isinstance(e, Carnivore) and e.is_alive]
-        closest_predator = None
-        closest_dist = 999
-        
-        for p in predators:
-            dist = abs(self.x - p.x) + abs(self.y - p.y)
-            if dist <= 4:  # Predator is in the danger zone!
-                if dist < closest_dist:
-                    closest_dist = dist
-                    closest_predator = p
-                    
-        return closest_predator
-
-    def _handle_thirst(self):
-        """Checks thirst and moves to water if needed. Returns True if thirsty."""
-
-        if self.thirst >= THIRST_THRESHOLD and self.target_water:
-            self.state = "SEEKING_WATER"
-            self.move_towards(self.target_water.x, self.target_water.y)
-            return True
-        return False
-
-    def _handle_herding(self, entities):
-        """Finds nearby friends of the same species and follows them."""
-
-        self.state = "WANDERING"
-
-        if not getattr(self, 'is_herd_animal', True):  # If this species doesn't herd, just move randomly
-            self.move_randomly()
-            return
-        
-        friends = [e for e in entities if type(e) == type(self) and e.is_alive and e.id != self.id]
-        
-        # Only care about friends within a radius of 6 spaces
-        nearby_herd = [f for f in friends if (abs(self.x - f.x) + abs(self.y - f.y)) <= 6]
-        
-        if nearby_herd:
-            # Find the center coordinates of the herd
-            avg_x = sum(f.x for f in nearby_herd) / len(nearby_herd)
-            avg_y = sum(f.y for f in nearby_herd) / len(nearby_herd)
-            
-            # 80% chance to follow the herd, 20% chance to stray and explore
-            if random.random() < 0.8:
-                self.move_towards(avg_x, avg_y)
-            else:
-                self.move_randomly()
+        Args:
+            herd_animal: True to follow herd, False for solo wandering
+        """
+        if herd_animal:
+            self.movement_strategy = HerdFollowStrategy()
         else:
-            self.move_randomly()
+            self.movement_strategy = RandomWalkStrategy()
 
-    def escape_predator(self, predator):
-        """Moves in the exact opposite direction of the threat."""
 
-        print(f"💨 {self.name} spotted a predator and is {Colors.fleeing('FLEEING!')}")
-        if self.x < predator.x: self.x -= 1
-        elif self.x > predator.x: self.x += 1
-        if self.y < predator.y: self.y -= 1
-        elif self.y > predator.y: self.y += 1
+class Herbivore(Animal):
+    """
+    Herbivore base class - animals that eat plants.
+    
+    Herbivores have the following behavior:
+    1. Check for predators (flee if spotted)
+    2. Check thirst (seek water if needed)
+    3. Check hunger (seek food if hungry)
+    4. Follow herd or wander randomly
+    
+    Food System:
+    - Herbivores now actually get hungry and seek food
+    - They find GrassPatch via food_manager
+    - Can only eat when at food source location
+    """
+    
+    def __init__(self, entity_id, name, x, y, is_diurnal=True, is_herd_animal=True):
+        """
+        Initialize a herbivore.
+        
+        Args:
+            is_herd_animal: True if this species moves in herds
+        """
+        super().__init__(entity_id, name, x, y, is_diurnal)
+        self.is_herd_animal = is_herd_animal
+        self.target_food = None  # Current food source
+        self.food_manager = None  # Reference to food manager
+        
+        # Set default movement strategy based on herd behavior
+        if is_herd_animal:
+            self.movement_strategy = HerdFollowStrategy()
+        else:
+            self.movement_strategy = RandomWalkStrategy()
+    
+    def set_food_manager(self, food_manager):
+        """
+        Set the food manager for this herbivore.
+        
+        Called by simulation when setting up the environment.
+        
+        Args:
+            food_manager: FoodManager instance
+        """
+        self.food_manager = food_manager
+    
+    def _seek_food(self, entities):
+        """
+        Find and move toward food source.
+        
+        Called when herbivore is hungry and needs to eat.
+        Looks for nearest GrassPatch with food available.
+        """
+        if not self.food_manager:
+            return False
+        
+        # If already have target, just move toward it
+        if self.target_food:
+            if self.target_food.is_depleted:
+                # Food source depleted, find new one
+                self.target_food = None
+            else:
+                # Move toward food
+                self.movement_strategy.seek_target(
+                    self, 
+                    self.target_food.x, 
+                    self.target_food.y
+                )
+                # Check if at food source
+                if self.x == self.target_food.x and self.y == self.target_food.y:
+                    from entities.states import EatingState
+                    self.set_state(EatingState(self))
+                return True
+        
+        # Find new food source
+        nearest = self.food_manager.find_nearest_food(
+            self.x, 
+            self.y,
+            max_distance=30
+        )
+        
+        if nearest:
+            self.target_food = nearest
+            # Move toward it
+            self.movement_strategy.seek_target(
+                self, 
+                nearest.x, 
+                nearest.y
+            )
+            # Check if already at food
+            if self.x == nearest.x and self.y == nearest.y:
+                from entities.states import EatingState
+                self.set_state(EatingState(self))
+            return True
+        
+        return False
+    
+    def update(self, current_hour, entities):
+        """
+        Update herbivore behavior.
+        
+        Herbivore-specific logic:
+        1. Hunger increases over time (needs food)
+        2. Check for predators first (survival priority)
+        3. Check hunger and seek food if needed
+        4. Let state handle rest of behavior
+        """
+        if not self.is_alive:
+            return
+        
+        # NOTE: Herbivores now get hungry!
+        # Previously: self.hunger = 0 (grass everywhere)
+        # Now: Hunger increases naturally in parent.update()
+        # Use higher rate to trigger eating behavior more often
+        self.hunger_rate = 3  # Herbivores get hungry faster
+        
+        # Check for desperate predator avoidance
+        if self.thirst >= DESPERATION_THRESHOLD:
+            from entities.states import DesperateState
+            self.set_state(DesperateState(self))
+        
+        # Delegate to parent (which delegates to state)
+        super().update(current_hour, entities)
+
+
 class Insectivore(Herbivore):
-    pass # Behaves exactly like a herbivore, just eats bugs instead of grass
+    """
+    Insectivore base class - animals that eat insects.
+    
+    Currently behaves exactly like a herbivore.
+    In a more complex simulation, would eat bugs instead of grass.
+    """
+    pass
+
 
 class Carnivore(Animal):
-    def act(self, entities):
-        # 1. Prioritize Water
-        if self.thirst >= THIRST_THRESHOLD and self.target_water:
-            self.state = "SEEKING_WATER"
-            self.move_towards(self.target_water.x, self.target_water.y)
+    """
+    Carnivore base class - animals that eat other animals.
+    
+    Carnivores have the following behavior:
+    1. Prioritize water if thirsty
+    2. Hunt if hungry
+    3. Wander if not hungry or no prey available
+    """
+    
+    def update(self, current_hour, entities):
+        """
+        Update carnivore behavior.
+        
+        Carnivore-specific logic:
+        1. If hungry, hunt for prey
+        2. If caught prey, feed (reset hunger)
+        3. Otherwise, normal animal behavior
+        """
+        if not self.is_alive:
             return
+        
+        # Let parent handle base update (which handles state pattern)
+        super().update(current_hour, entities)
 
-        # 2. Prioritize Hunting
-        if self.hunger >= HUNGER_THRESHOLD:
-            self.state = "HUNTING"
-            # Find prey (Any alive Herbivore or Insectivore)
-            prey_list = [e for e in entities if isinstance(e, (Herbivore, Insectivore)) and e.is_alive]
-            
-            if prey_list:
-                # Simple tracking: pick the first prey in the list
-                target = prey_list[0]
-                self.move_towards(target.x, target.y)
-                
-                # The Kill!
-                if self.x == target.x and self.y == target.y:
-                    target.die(f"Hunted by {self.name}")
-                    self.hunger = 0
-                    self.state = "WANDERING"
-                    print(f"🥩 {self.name} feasted on {target.name}!")
-            else:
-                self.move_randomly() # No prey found, keep wandering
-        else:
-            self.state = "WANDERING"
-            self.move_randomly()
 
 # ==========================================
-# SPECIFIC ANIMALS (The easy part!)
+# SPECIFIC ANIMAL TYPES
 # ==========================================
-# Diurnal Herbivores
+# Each specific animal inherits from the appropriate base class.
+# They can override __init__ to set specific properties.
+#
+# Diurnal Herbivores (active during day, sleep at night)
 class Zebra(Herbivore): pass
 class Elephant(Herbivore): pass
 class Giraffe(Herbivore): pass
@@ -234,13 +347,15 @@ class Buffalo(Herbivore): pass
 class Rhino(Herbivore): pass
 class Antelope(Herbivore): pass
 class Ostrich(Herbivore): pass
+
+# Diurnal Insectivores
 class Meerkat(Insectivore): pass
 
-# Diurnal Carnivores
+# Diurnal Carnivores (active during day, sleep at night)
 class Lion(Carnivore): pass
 class Cheetah(Carnivore): pass
 
-# Nocturnal Animals (is_diurnal=False)
+# Nocturnal Animals (active during night, sleep during day)
 class Leopard(Carnivore):
     def __init__(self, entity_id, name, x, y):
         super().__init__(entity_id, name, x, y, is_diurnal=False)
@@ -252,4 +367,3 @@ class BushBaby(Insectivore):
 class Pangolin(Insectivore):
     def __init__(self, entity_id, name, x, y):
         super().__init__(entity_id, name, x, y, is_diurnal=False)
-        

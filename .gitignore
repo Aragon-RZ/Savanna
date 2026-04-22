@@ -1,16 +1,54 @@
-#.gitignore
+# Python project .gitignore - excludes bytecode, virtual environments, logs, databases, and IDE files
 
+# Virtual Environments
 .venv/
+venv/
+ENV/
+env/
+.env.local
+
+# Python Bytecode & Cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.cpython-*.pyc
+.Python
+*.so
+
+# Python Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.tox/
+
+# Python Build & Distribution
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Databases & Logs
 *.db
 *.sqlite3
 *.log
+
+# OS Files
 .DS_Store
+Thumbs.db
+
+# IDE Files
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
+
+# Environment & Sensitive Files
 *.env
-.env.*
-*.cpython-*.pyc
+*.key
+*.pem
+secrets.json
+config.local.*
