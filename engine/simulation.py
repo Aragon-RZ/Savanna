@@ -198,6 +198,13 @@ class SimulationEngine(threading.Thread):
             except:
                 pass
             
+            # NEW: Export all simulation data
+            try:
+                from engine.export import ExportManager
+                ExportManager.export_all("savanna_simulation.db")
+            except:
+                pass
+            
         except Exception as e:
             print(f"\n❌ ERROR in simulation: {str(e)}")
             import traceback
