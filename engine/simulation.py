@@ -87,6 +87,23 @@ class SimulationEngine(threading.Thread):
                 self.weather_system.update(self.tick_count)
                 weather_multiplier = self.weather_system.food_regrow_rate
                 
+                # NEW: Record environmental state
+                try:
+                    from engine.analytics_db import EnvironmentalStateRecorder
+                    total_grass = sum(s.quantity for s in self.food_manager.sources) if self.food_manager else 0
+                    EnvironmentalStateRecorder.record_state(
+                        tick=self.tick_count,
+                        season=self.weather_system.season.value,
+                        weather=self.weather_system.current_event.value,
+                        temperature=self.weather_system.temperature,
+                        total_grass=total_grass,
+                        total_water=0,  # Would need actual water tracking
+                        water_mult=self.weather_system.water_multiplier,
+                        food_regrow=weather_multiplier
+                    )
+                except:
+                    pass
+                
                 # NEW: Regrow food sources with weather effect
                 if self.food_manager:
                     self.food_manager.regrow_all(weather_multiplier)
@@ -172,6 +189,14 @@ class SimulationEngine(threading.Thread):
                 
             # Simulation finished - print final summary
             self._print_final_summary()
+            
+            # NEW: Print analytics report
+            try:
+                from engine.analytics_engine import SimulationAnalyticsEngine
+                analytics = SimulationAnalyticsEngine()
+                analytics.print_report()
+            except:
+                pass
             
         except Exception as e:
             print(f"\n❌ ERROR in simulation: {str(e)}")

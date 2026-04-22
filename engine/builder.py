@@ -2,6 +2,7 @@
 import random
 from engine.simulation import SimulationEngine
 from engine.database import DatabaseManager
+from engine.analytics_db import EnhancedSchema
 from environment.nature import WateringHole
 from environment.food import FoodManager, GrassPatch
 from entities.animals import Zebra, Elephant, Lion, Leopard, BushBaby
@@ -11,6 +12,7 @@ class SafariBuilder:
     def __init__(self, max_ticks=240):  
         # Initialize database on startup
         DatabaseManager.initialize()
+        EnhancedSchema.create_tables()  # NEW: Enhanced schema
         
         self.engine = SimulationEngine(max_ticks=max_ticks)
         self.water = None
