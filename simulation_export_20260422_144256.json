@@ -1,0 +1,396 @@
+{
+  "timestamp": "2026-04-22T14:42:56.663965",
+  "database": "savanna_simulation.db",
+  "summary": {
+    "total_events": 32,
+    "total_births": 0,
+    "total_deaths": 0,
+    "simulation_config": {
+      "initial_pop": 4,
+      "final_pop": 4,
+      "births": 0,
+      "deaths": 0
+    }
+  },
+  "events": [
+    {
+      "tick": 0,
+      "entity_id": 1,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 2,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 3,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 1,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 2,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 3,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 1,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 2,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 3,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 1,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 2,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 0,
+      "entity_id": 3,
+      "event_type": "ENTITY_ATE",
+      "details": "consumed=True"
+    },
+    {
+      "tick": 1,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=24.1"
+    },
+    {
+      "tick": 2,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=20.7"
+    },
+    {
+      "tick": 3,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=rain,temp=20.2"
+    },
+    {
+      "tick": 4,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=23.7"
+    },
+    {
+      "tick": 5,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=rain,temp=20.7"
+    },
+    {
+      "tick": 6,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=19.9"
+    },
+    {
+      "tick": 7,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=24.3"
+    },
+    {
+      "tick": 8,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=rain,temp=20.2"
+    },
+    {
+      "tick": 9,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=19.8"
+    },
+    {
+      "tick": 10,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=rain,temp=22.9"
+    },
+    {
+      "tick": 11,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=24.8"
+    },
+    {
+      "tick": 12,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=23.4"
+    },
+    {
+      "tick": 13,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=19.2"
+    },
+    {
+      "tick": 14,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=22.1"
+    },
+    {
+      "tick": 15,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=rain,temp=22.5"
+    },
+    {
+      "tick": 16,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=rain,temp=24.3"
+    },
+    {
+      "tick": 17,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=rain,temp=21.1"
+    },
+    {
+      "tick": 18,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=24.3"
+    },
+    {
+      "tick": 19,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=none,temp=24.2"
+    },
+    {
+      "tick": 20,
+      "entity_id": null,
+      "event_type": "WEATHER",
+      "details": "season=wet,event=rain,temp=23.5"
+    }
+  ],
+  "population": {},
+  "environment": [
+    {
+      "tick": 1,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 24.09020927827437,
+      "grass": 480,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 2,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 20.71790587282512,
+      "grass": 480,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 3,
+      "season": "wet",
+      "weather": "rain",
+      "temperature": 20.169717451634277,
+      "grass": 480,
+      "water_mult": 2.0,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 4,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 23.66870543681474,
+      "grass": 480,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 5,
+      "season": "wet",
+      "weather": "rain",
+      "temperature": 20.657995915815984,
+      "grass": 480,
+      "water_mult": 2.0,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 6,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 19.907502930197168,
+      "grass": 480,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 7,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 24.34339463581146,
+      "grass": 480,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 8,
+      "season": "wet",
+      "weather": "rain",
+      "temperature": 20.164626307967147,
+      "grass": 480,
+      "water_mult": 2.0,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 9,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 19.76203193026811,
+      "grass": 450,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 10,
+      "season": "wet",
+      "weather": "rain",
+      "temperature": 22.894834610290115,
+      "grass": 450,
+      "water_mult": 2.0,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 11,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 24.7619297801456,
+      "grass": 450,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 12,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 23.4472228715954,
+      "grass": 450,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 13,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 19.23741711949991,
+      "grass": 423,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 14,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 22.09968861413752,
+      "grass": 423,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 15,
+      "season": "wet",
+      "weather": "rain",
+      "temperature": 22.50948422502769,
+      "grass": 423,
+      "water_mult": 2.0,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 16,
+      "season": "wet",
+      "weather": "rain",
+      "temperature": 24.318942397352107,
+      "grass": 423,
+      "water_mult": 2.0,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 17,
+      "season": "wet",
+      "weather": "rain",
+      "temperature": 21.073845747507917,
+      "grass": 429,
+      "water_mult": 2.0,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 18,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 24.301921860666475,
+      "grass": 399,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 19,
+      "season": "wet",
+      "weather": "none",
+      "temperature": 24.16784776466524,
+      "grass": 399,
+      "water_mult": 1.5,
+      "food_regrow_rate": 1.5
+    },
+    {
+      "tick": 20,
+      "season": "wet",
+      "weather": "rain",
+      "temperature": 23.492217901226425,
+      "grass": 399,
+      "water_mult": 2.0,
+      "food_regrow_rate": 1.5
+    }
+  ],
+  "demographics": {
+    "total_births": 0,
+    "death_causes": {}
+  }
+}
