@@ -1,6 +1,7 @@
 
 import random
 from engine.simulation import SimulationEngine
+from engine.database import DatabaseManager
 from environment.nature import WateringHole
 from environment.food import FoodManager, GrassPatch
 from entities.animals import Zebra, Elephant, Lion, Leopard, BushBaby
@@ -8,10 +9,13 @@ from entities.reproduction import ReproductionManager
 
 class SafariBuilder:
     def __init__(self, max_ticks=240):  
-        self.engine = SimulationEngine(max_ticks=max_ticks) #simulation engine: how long it runs
-        self.water = None #stores watering hole; shared resource 
-        self.food_manager = FoodManager()  # NEW: Food management
-        self.reproduction_manager = ReproductionManager()  # NEW: Reproduction
+        # Initialize database on startup
+        DatabaseManager.initialize()
+        
+        self.engine = SimulationEngine(max_ticks=max_ticks)
+        self.water = None
+        self.food_manager = FoodManager()
+        self.reproduction_manager = ReproductionManager()
         self.animal_counter = 1
 
     def build_environment(self):

@@ -57,17 +57,26 @@ class MatingState(AnimalState):
                 if sim:
                     sim.add_entity(baby)
                     
-                    # Log to database
+                    # Log birth to database
                     try:
+                        from engine.database_utils import DatabaseRecorder
+                        current_tick = getattr(self.animal, 'current_tick', 0)
+                        DatabaseRecorder.record_birth(
+                            entity_id=baby.id,
+                            parent_ids=[self.animal.id, self.partner.id],
+                            species=type(baby).__name__,
+                            tick=current_tick
+                        )
+                        # Also log event
                         from engine.database import DatabaseManager
                         DatabaseManager.log_event(
-                            tick=getattr(self.animal, 'current_tick', 0),
+                            tick=current_tick,
                             entity_id=baby.id,
                             event_type="ENTITY_BORN",
-                            details=f"parent1={self.animal.id}, parent2={self.partner.id}"
+                            details=f"parents={self.animal.id},{self.partner.id}"
                         )
-                    except:
-                        pass
+                    except Exception as e:
+                        pass  # Silently fail if database logging not available
         
         # Return to wandering
         self.transition_to(WanderingState(self.animal))

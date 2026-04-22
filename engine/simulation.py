@@ -176,9 +176,20 @@ class SimulationEngine(threading.Thread):
     
     def _print_final_summary(self):
         """Print comprehensive simulation summary at the end"""
+        from engine.database_utils import DatabaseRecorder
+        
         final_population = self._count_current_population()
         total_final = sum(final_population.values())
         total_dead = len([e for e in self.entities if not e.is_alive])
+        
+        # Record simulation run metadata
+        DatabaseRecorder.record_simulation_run(
+            max_ticks=self.max_ticks,
+            initial_population=self.stats['initial_population'],
+            final_population=total_final,
+            total_deaths=total_dead,
+            total_births=total_final - self.stats['initial_population'] + total_dead
+        )
         
         print("\n" + "="*60)
         print("🛑 SIMULATION COMPLETE")
