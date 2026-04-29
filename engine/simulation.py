@@ -15,6 +15,7 @@ import time
 import threading
 from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR, MAX_THIRST, MAX_HUNGER
 from utils.colors import Colors
+from engine.weather import WeatherSystem
 
 
 class SimulationEngine(threading.Thread):
@@ -25,6 +26,7 @@ class SimulationEngine(threading.Thread):
         self.is_running = False
         self.entities = []
         self.environments = []
+        self.weather = WeatherSystem()
 
     def add_entity(self, entity):
         self.entities.append(entity)
@@ -34,6 +36,7 @@ class SimulationEngine(threading.Thread):
 
     def run(self):
         self.is_running = True
+        self.weather.start()   # ← starts the daemon thread
         print("\n" + "="*40)
         print("🌍 SAFARI SIMULATION ENGINE STARTED")
         print("="*40 + "\n")
@@ -48,6 +51,14 @@ class SimulationEngine(threading.Thread):
                 print("\n🌇 The sun is setting. It is getting dark...")
 
             print(f"--- ⏰ Tick {self.tick_count} | Hour: {current_hour}:00 ---")
+
+            # WEATHER — apply modifiers to all living entities this tick
+            thirst_mod, hunger_mod = self.weather.get_modifiers()
+            if thirst_mod != 0 or hunger_mod != 0:
+                for entity in self.entities:
+                    if entity.is_alive and hasattr(entity, 'thirst'):
+                        entity.thirst = max(0, entity.thirst + thirst_mod)
+                        entity.hunger = max(0, entity.hunger + hunger_mod)
 
             # 1. Update all entities
             for entity in self.entities:
