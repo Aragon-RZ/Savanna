@@ -16,6 +16,7 @@ import threading
 from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR, MAX_THIRST, MAX_HUNGER
 from utils.colors import Colors
 from engine.weather import WeatherSystem
+from utils.logger import SimulationLogger
 
 
 class SimulationEngine(threading.Thread):
@@ -27,6 +28,7 @@ class SimulationEngine(threading.Thread):
         self.entities = []
         self.environments = []
         self.weather = WeatherSystem()
+        self.logger = SimulationLogger()
 
     def add_entity(self, entity):
         self.entities.append(entity)
@@ -113,5 +115,13 @@ class SimulationEngine(threading.Thread):
                 print("\n🛑 Max ticks reached. Stopping simulation.")
                 self.is_running = False
                 break
+
+            self.logger.log(
+                tick=self.tick_count,
+                hour=current_hour,
+                entities=self.entities,
+                weather_name=self.weather.current_weather.name,
+                environments=self.environments
+            )
 
             time.sleep(TICK_RATE)
