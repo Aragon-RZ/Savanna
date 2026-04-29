@@ -14,6 +14,7 @@ from environment.nature import WateringHole
 from environment.base import SavannaZone
 from entities.animals import Zebra, Elephant, Lion, Leopard, BushBaby
 from utils.constants import GRID_WIDTH, GRID_HEIGHT
+from entities.humans import Ranger
 
 
 class SafariBuilder:
@@ -68,3 +69,13 @@ class SafariBuilder:
 
     def get_engine(self):
         return self.engine
+    
+    def add_rangers(self, count):
+        """Spawn rangers at opposite corners of the map."""
+        positions = [(10, 10), (90, 90), (10, 90), (90, 10)]
+        for i in range(min(count, len(positions))):
+            x, y = positions[i]
+            ranger = Ranger(name=f"Ranger {i+1}", x=x, y=y)
+            ranger.start()   # start the thread immediately
+            self.engine.entities.append(ranger)
+        return self

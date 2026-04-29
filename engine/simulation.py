@@ -65,6 +65,10 @@ class SimulationEngine(threading.Thread):
                 if entity.is_alive:
                     entity.update(current_hour, self.entities)
 
+                    # Skip display for Rangers — they print themselves
+                    if entity.__class__.__name__ == "Ranger":
+                        continue
+
                     # Colorize state for display
                     if entity.state == "DEAD":
                         c_state = Colors.dead(entity.state)

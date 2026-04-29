@@ -13,6 +13,7 @@ def main():
                      .add_lions(3)        # A pride of lions
                      .add_leopards(1)
                      .add_bushbabies(4)
+                     .add_rangers(2) 
                      .get_engine())
 
     # Run the simulation
