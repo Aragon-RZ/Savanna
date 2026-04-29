@@ -22,6 +22,7 @@ from utils.events import event_bus, Event, EventListener
 from utils.constants import GRID_WIDTH, GRID_HEIGHT
 
 
+
 # ── STRATEGY PATTERN — Ranger Behaviors ─────────────────────
 
 class RangerStrategy:
@@ -56,7 +57,7 @@ class RespondStrategy:
 
         # Arrived at scene
         if ranger.x == self.target_x and ranger.y == self.target_y:
-            print(f"🚨 Ranger {ranger.name} arrived at scene of {self.animal_name}!")
+            print(f"🚨  {ranger.name} arrived at scene of {self.animal_name}!")
             ranger.behavior = RangerStrategy()  # back to patrolling
 
 
@@ -101,19 +102,28 @@ class Ranger(threading.Thread, EventListener):
         if not entity:
             return
 
+        # Each ranger only responds to events in their half of the map
+        if entity.y > GRID_HEIGHT // 2 and self.y < GRID_HEIGHT // 2:
+            return  # south event, north ranger — ignore
+        if entity.y < GRID_HEIGHT // 2 and self.y > GRID_HEIGHT // 2:
+            return  # north event, south ranger — ignore
+
         if event_type == Event.ANIMAL_DIED:
-            print(f"📻 Ranger {self.name} received DEATH report: "
-                  f"{entity.name} at ({entity.x}, {entity.y})!")
+            print(f"📻  {self.name} received DEATH report: "
+                f"{entity.name} at ({entity.x}, {entity.y})!")
             with self._lock:
                 self.behavior = RespondStrategy(entity.x, entity.y, entity.name)
 
         elif event_type == Event.ANIMAL_DESPERATE:
-            print(f"📻 Ranger {self.name} received DISTRESS signal: "
-                  f"{entity.name} at ({entity.x}, {entity.y})!")
-            # Only respond if not already on a more urgent call
-            with self._lock:
-                if isinstance(self.behavior, RangerStrategy):
-                    self.behavior = RespondStrategy(entity.x, entity.y, entity.name)
+            entity = payload.get("entity")
+            if entity:
+                dist = abs(entity.x - self.x) + abs(entity.y - self.y)
+                if dist <= 15:
+                    print(f"👁️  {self.name} spotted distressed "
+                        f"{entity.name} at ({entity.x}, {entity.y})!")
+                    with self._lock:
+                        if isinstance(self.behavior, RangerStrategy):
+                            self.behavior = RespondStrategy(entity.x, entity.y, entity.name)
 
     def update(self, current_hour, entities):
         """
@@ -125,7 +135,7 @@ class Ranger(threading.Thread, EventListener):
     # ── THREAD run loop ──────────────────────────────────────
     def run(self):
         self.is_running = True
-        print(f"🌿 Ranger {self.name} started patrol at ({self.x}, {self.y})")
+        print(f"🌿  {self.name} started patrol at ({self.x}, {self.y})")
 
         while self.is_running:
             with self._lock:

@@ -15,6 +15,7 @@ from environment.base import SavannaZone
 from entities.animals import Zebra, Elephant, Lion, Leopard, BushBaby
 from utils.constants import GRID_WIDTH, GRID_HEIGHT
 from entities.humans import Ranger
+from entities.vehicles import SafariJeep, BASE_X, BASE_Y
 
 
 class SafariBuilder:
@@ -71,11 +72,25 @@ class SafariBuilder:
         return self.engine
     
     def add_rangers(self, count):
-        """Spawn rangers at opposite corners of the map."""
-        positions = [(10, 10), (90, 90), (10, 90), (90, 10)]
+        positions = [(3, 3), (15, 15)]   # both in the active zone, different corners
         for i in range(min(count, len(positions))):
             x, y = positions[i]
             ranger = Ranger(name=f"Ranger {i+1}", x=x, y=y)
-            ranger.start()   # start the thread immediately
+            ranger.start()
             self.engine.entities.append(ranger)
+        return self
+    
+    def add_jeeps(self, count):
+    # Each jeep gets its own patrol zone
+        configs = [
+            (BASE_X, BASE_Y, 5, 10,  8),   # Jeep 1 patrols north zone
+            (BASE_X, BASE_Y, 5, 20, 10),   # Jeep 2 patrols south zone
+        ]
+        for i in range(min(count, len(configs))):
+            start_x, start_y, zone_x, zone_y, radius = configs[i]
+            jeep = SafariJeep(name=f"Jeep {i+1}", x=start_x, y=start_y,
+                            zone_x=zone_x, zone_y=zone_y, zone_radius=radius)
+            jeep.known_entities = self.engine.entities
+            jeep.start()
+            self.engine.entities.append(jeep)
         return self
