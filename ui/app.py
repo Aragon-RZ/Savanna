@@ -38,6 +38,12 @@ from utils.events import Event, EventListener, event_bus
 EVENT_TYPES = [
     Event.ANIMAL_DIED,
     Event.ANIMAL_BORN,
+    Event.POACHER_SPOTTED,
+    Event.POACHER_ARRESTED,
+    Event.POACHER_ESCAPED,
+    Event.POACHING_ATTACK,
+    Event.RANGER_CAMP_CREATED,
+    Event.RANGER_CAMP_EXPIRED,
     Event.WATER_SPOT_FREED,
     Event.GRAZING_SPOT_FREED,
     Event.ANIMAL_HUNTING,
@@ -96,6 +102,47 @@ class UiEventCollector(EventListener):
                 f"from {getattr(parent_a, 'name', 'parent')} and "
                 f"{getattr(parent_b, 'name', 'parent')}"
             )
+
+        if event_type == Event.POACHER_SPOTTED:
+            poacher = payload.get("poacher")
+            target = payload.get("target")
+            zone_id = payload.get("zone_id")
+            return (
+                f"Poacher: {getattr(poacher, 'name', 'Unknown')} "
+                f"entered zone {zone_id} near {getattr(target, 'name', 'wildlife')}"
+            )
+
+        if event_type == Event.POACHER_ARRESTED:
+            poacher = payload.get("poacher")
+            ranger = payload.get("ranger")
+            return (
+                f"Arrest: {getattr(ranger, 'name', 'Ranger')} stopped "
+                f"{getattr(poacher, 'name', 'poacher')}"
+            )
+
+        if event_type == Event.POACHER_ESCAPED:
+            poacher = payload.get("poacher")
+            return f"Escape: {getattr(poacher, 'name', 'Poacher')} left the reserve"
+
+        if event_type == Event.POACHING_ATTACK:
+            poacher = payload.get("poacher")
+            target = payload.get("target")
+            return (
+                f"Poaching: {getattr(poacher, 'name', 'Poacher')} killed "
+                f"{getattr(target, 'name', 'wildlife')}"
+            )
+
+        if event_type == Event.RANGER_CAMP_CREATED:
+            camp = payload.get("camp")
+            ranger = payload.get("ranger")
+            return (
+                f"Camp: {getattr(ranger, 'name', 'A ranger')} set "
+                f"{getattr(camp, 'name', 'temporary camp')}"
+            )
+
+        if event_type == Event.RANGER_CAMP_EXPIRED:
+            camp = payload.get("camp")
+            return f"Camp expired: {getattr(camp, 'name', 'temporary camp')}"
 
         if event_type == Event.ANIMAL_HUNTING:
             predator = payload.get("predator")
@@ -258,6 +305,9 @@ class SavannaApp(tk.Tk):
             "Alive",
             "Births",
             "Deaths",
+            "Poachers",
+            "Arrests",
+            "Poached",
             "Herbivores",
             "Carnivores",
             "Insectivores",
@@ -727,6 +777,9 @@ class SavannaApp(tk.Tk):
             "Alive": str(summary["alive_total"]),
             "Births": str(summary.get("births_total", 0)),
             "Deaths": str(summary.get("deaths_total", 0)),
+            "Poachers": str(summary.get("active_poachers", 0)),
+            "Arrests": str(summary.get("poachers_arrested_total", 0)),
+            "Poached": str(summary.get("poached_animals_total", 0)),
             "Herbivores": str(summary["alive_herbivores"]),
             "Carnivores": str(summary["alive_carnivores"]),
             "Insectivores": str(summary["alive_insectivores"]),
@@ -898,6 +951,8 @@ class SavannaApp(tk.Tk):
         land_type = land_object.get("land_type", "land")
         if land_type == "ranger_station":
             fill, outline, roof, label = "#35614a", "#183425", "#244c38", "R"
+        elif land_type == "temporary_ranger_camp":
+            fill, outline, roof, label = "#4f6f54", "#1f3422", "#6f8b52", "C"
         else:
             fill, outline, roof, label = "#c78b42", "#6a4318", "#9c6027", "S"
 
@@ -921,11 +976,18 @@ class SavannaApp(tk.Tk):
         canvas.create_text(x, y, text=label, fill="#ffffff", font=("Helvetica", 9, "bold"))
         canvas.create_text(
             x + width / 2 + 7, y,
-            text=land_object["name"],
+            text=self._land_object_label(land_object),
             anchor="w",
             fill=outline,
             font=("Helvetica", 10, "bold")
         )
+
+    def _land_object_label(self, land_object):
+        if land_object.get("land_type") != "temporary_ranger_camp":
+            return land_object["name"]
+        expires = land_object.get("expires_at_tick")
+        suffix = f" until {expires}" if expires is not None else ""
+        return f"{land_object['name']}{suffix}"
 
     def _draw_grazing_area(self, canvas, area, pad, map_width, map_height):
         x = self._sx(area["x"], pad, map_width)
@@ -958,6 +1020,7 @@ class SavannaApp(tk.Tk):
             "carnivore": ("#d35a3a", "#682416"),
             "ranger": ("#214f3a", "#0e2118"),
             "vehicle": ("#e8b342", "#684600"),
+            "poacher": ("#2b2b2b", "#000000"),
             "other": ("#6f7278", "#33363a"),
         }
         fill, outline = palette.get(category, palette["other"])
@@ -991,6 +1054,16 @@ class SavannaApp(tk.Tk):
                 outline=outline,
                 width=2
             )
+        elif category == "poacher":
+            canvas.create_polygon(
+                x, y - size - 2,
+                x + size + 2, y,
+                x, y + size + 2,
+                x - size - 2, y,
+                fill=fill,
+                outline=outline,
+                width=2
+            )
         elif category == "vehicle":
             canvas.create_rectangle(
                 x - size - 2, y - size, x + size + 2, y + size,
@@ -1011,6 +1084,8 @@ class SavannaApp(tk.Tk):
             label = "R"
         elif category == "vehicle":
             label = "J"
+        elif category == "poacher":
+            label = "P"
         canvas.create_text(x, y, text=label, fill="#ffffff", font=("Helvetica", 8, "bold"))
 
     def _update_buttons(self):

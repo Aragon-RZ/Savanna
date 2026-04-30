@@ -351,3 +351,17 @@ class RangerStation(LandObject):
 
 class SafariStation(LandObject):
     land_type = "safari_station"
+
+
+class TemporaryRangerCamp(LandObject):
+    land_type = "temporary_ranger_camp"
+
+    def __init__(self, name: str, x: int, y: int, zone_id: str,
+                 expires_at_tick: int):
+        super().__init__(name, x, y)
+        self.zone_id = zone_id
+        self.expires_at_tick = expires_at_tick
+
+    def status(self) -> str:
+        return (f"{self.name} | temporary camp for zone {self.zone_id} "
+                f"until tick {self.expires_at_tick} @ ({self.x}, {self.y})")

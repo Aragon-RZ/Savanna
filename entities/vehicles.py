@@ -40,29 +40,35 @@ class PatrolRouteStrategy:
         self.zone_y = zone_y
         self.radius = radius   # how far from center to wander
         self.spotted_this_tour = set()
+        self.waypoint = None
 
     def execute(self, jeep):
+        if not self._inside_zone(jeep.x, jeep.y):
+            jeep.state = "TRAVELLING TO TOUR ZONE"
+            jeep.move_towards(self.zone_x, self.zone_y, jeep.CRUISE_STEP)
+            return
+
         jeep.state = "ON TOUR"
         living = [
             entity for entity in jeep.known_entities
             if hasattr(entity, "is_alive") and entity.is_alive
-            and entity.__class__.__name__ not in ("Ranger", "SafariJeep")
+            and hasattr(entity, "thirst")
+            and self._inside_zone(entity.x, entity.y, margin=5)
         ]
 
-        if living and random.random() < 0.7:
+        if living and random.random() < 0.55:
             nearest = min(living, key=lambda e: abs(e.x - jeep.x) + abs(e.y - jeep.y))
-            target_x = max(self.zone_x - self.radius, min(self.zone_x + self.radius, nearest.x))
-            target_y = max(self.zone_y - self.radius, min(self.zone_y + self.radius, nearest.y))
-            jeep.move_towards(target_x, target_y, jeep.PATROL_STEP)
+            jeep.move_towards(nearest.x, nearest.y, jeep.PATROL_STEP)
         else:
-            jeep.move_randomly_in_zone(self.zone_x, self.zone_y, self.radius)
+            target_x, target_y = self._current_waypoint(jeep)
+            jeep.move_towards(target_x, target_y, jeep.PATROL_STEP)
 
         # Passive sighting within zone
         nearby = [
             entity for entity in jeep.known_entities
             if hasattr(entity, "is_alive") and entity.is_alive
             and hasattr(entity, "state")
-            and entity.__class__.__name__ not in ("Ranger", "SafariJeep")
+            and hasattr(entity, "thirst")
             and abs(entity.x - jeep.x) + abs(entity.y - jeep.y) <= 8
             and entity.id not in self.spotted_this_tour
         ]
@@ -72,6 +78,25 @@ class PatrolRouteStrategy:
             jeep._print(f"   📷 [{jeep.name}] Tourists spotted: "
                         f"{spotted.name} ({spotted.state}) nearby!")
             jeep.sightings += 1
+
+    def _inside_zone(self, x, y, margin=0):
+        return (
+            self.zone_x - self.radius - margin <= x <= self.zone_x + self.radius + margin
+            and self.zone_y - self.radius - margin <= y <= self.zone_y + self.radius + margin
+        )
+
+    def _current_waypoint(self, jeep):
+        if self.waypoint:
+            distance = abs(jeep.x - self.waypoint[0]) + abs(jeep.y - self.waypoint[1])
+            if distance > 3:
+                return self.waypoint
+
+        min_x = max(0, self.zone_x - self.radius)
+        max_x = min(GRID_WIDTH - 1, self.zone_x + self.radius)
+        min_y = max(0, self.zone_y - self.radius)
+        max_y = min(GRID_HEIGHT - 1, self.zone_y + self.radius)
+        self.waypoint = (random.randint(min_x, max_x), random.randint(min_y, max_y))
+        return self.waypoint
 
 
 class ChaseStrategy:
@@ -139,10 +164,11 @@ class RefuelStrategy:
 
 class SafariJeep(threading.Thread, EventListener):
 
-    DRIVE_SPEED = 0.9
-    PATROL_STEP = 4
-    CHASE_STEP = 3
-    RETURN_STEP = 3
+    DRIVE_SPEED = 0.75
+    CRUISE_STEP = 6
+    PATROL_STEP = 5
+    CHASE_STEP = 4
+    RETURN_STEP = 5
 
     def __init__(self, name: str, x: int = BASE_X, y: int = BASE_Y,
              zone_x: int = 5, zone_y: int = 5, zone_radius: int = 10,
@@ -158,12 +184,12 @@ class SafariJeep(threading.Thread, EventListener):
         self.sightings = 0
         self.seat_capacity = seat_capacity
         self.seats_taken = 0
-        self.fuel_capacity = 100
-        self.fuel_level = 100
-        self.fuel_low_threshold = 70
+        self.fuel_capacity = 160
+        self.fuel_level = 160
+        self.fuel_low_threshold = 35
         self.minimum_tour_fuel = 90
-        self.fuel_burn_rate = 0.35
-        self.refuel_rate = 25
+        self.fuel_burn_rate = 0.16
+        self.refuel_rate = 40
         self.behavior = None
         self.daemon = True
         self.is_running = False
@@ -277,6 +303,12 @@ class SafariJeep(threading.Thread, EventListener):
         if self.fuel_level <= 0:
             self.state = "OUT OF FUEL"
             self.seats_taken = 0
+            return
+
+        if not (zone_x - radius <= self.x <= zone_x + radius
+                and zone_y - radius <= self.y <= zone_y + radius):
+            self.state = "TRAVELLING TO TOUR ZONE"
+            self.move_towards(zone_x, zone_y, self.CRUISE_STEP)
             return
 
         old_x, old_y = self.x, self.y

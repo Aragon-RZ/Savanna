@@ -19,7 +19,10 @@ from utils.constants import (
     GRID_WIDTH, GRID_HEIGHT, REPRODUCTION_CHECK_INTERVAL, REPRODUCTION_CHANCE,
     REPRODUCTION_RADIUS, REPRODUCTION_MIN_AGE_TICKS, REPRODUCTION_COOLDOWN_TICKS,
     REPRODUCTION_MAX_ANIMALS, REPRODUCTION_MAX_BIRTHS_PER_TICK,
-    REPRODUCTION_MAX_THIRST, REPRODUCTION_MAX_HUNGER
+    REPRODUCTION_MAX_THIRST, REPRODUCTION_MAX_HUNGER,
+    POACHER_CAMP_DURATION_TICKS, POACHER_CAMP_THRESHOLD,
+    POACHER_EVENT_CHANCE, POACHER_EVENT_CHECK_INTERVAL,
+    POACHER_MAX_ACTIVE, POACHER_ZONE_SIZE
 )
 from utils.colors import Colors
 from utils.events import Event, event_bus
@@ -52,6 +55,17 @@ class SimulationEngine(threading.Thread):
         self.deaths_by_species = {}
         self.deaths_by_cause = {}
         self._known_dead_ids = set()
+        self.poacher_spawns_total = 0
+        self.poachers_arrested_total = 0
+        self.poachers_escaped_total = 0
+        self.poached_animals_total = 0
+        self.poachers_arrested_this_tick = 0
+        self.poachers_escaped_this_tick = 0
+        self.poached_animals_this_tick = 0
+        self.poacher_incidents_by_zone = {}
+        self.temporary_camps_created = 0
+        self.temporary_camps = {}
+        self._known_terminal_poacher_ids = set()
 
     def add_entity(self, entity):
         with self._lock:
@@ -169,6 +183,9 @@ class SimulationEngine(threading.Thread):
         current_hour = self.tick_count % TICKS_PER_DAY
         self.births_this_tick = 0
         self.deaths_this_tick = 0
+        self.poachers_arrested_this_tick = 0
+        self.poachers_escaped_this_tick = 0
+        self.poached_animals_this_tick = 0
 
         if current_hour == SUNRISE_HOUR:
             self._print("\n🌅 The sun is rising over the savanna...")
@@ -185,6 +202,9 @@ class SimulationEngine(threading.Thread):
                     entity.thirst = max(0, entity.thirst + thirst_mod)
                     entity.hunger = max(0, entity.hunger + hunger_mod)
 
+        self._expire_temporary_camps()
+        self._maybe_spawn_poacher()
+
         # 1. Update all entities
         for entity in list(self.entities):
             if getattr(entity, "is_alive", False):
@@ -198,6 +218,7 @@ class SimulationEngine(threading.Thread):
             env.update(self.tick_count, self.entities)
 
         self._record_new_deaths()
+        self._record_terminal_poachers()
         self._try_reproduction()
 
         # 3. Print environment status every 6 ticks
@@ -271,6 +292,209 @@ class SimulationEngine(threading.Thread):
             self.deaths_this_tick += 1
             self.deaths_by_species[species] = self.deaths_by_species.get(species, 0) + 1
             self.deaths_by_cause[cause] = self.deaths_by_cause.get(cause, 0) + 1
+            if "poached" in str(cause).lower():
+                self.poached_animals_total += 1
+                self.poached_animals_this_tick += 1
+
+    def _record_terminal_poachers(self):
+        for entity in self.entities:
+            if entity.__class__.__name__ != "Poacher":
+                continue
+
+            resolution = getattr(entity, "resolution", None)
+            if not resolution:
+                continue
+
+            entity_key = id(entity)
+            if entity_key in self._known_terminal_poacher_ids:
+                continue
+
+            self._known_terminal_poacher_ids.add(entity_key)
+            if resolution == "arrested":
+                self.poachers_arrested_total += 1
+                self.poachers_arrested_this_tick += 1
+            elif resolution == "escaped":
+                self.poachers_escaped_total += 1
+                self.poachers_escaped_this_tick += 1
+
+    def _maybe_spawn_poacher(self):
+        if self.tick_count % POACHER_EVENT_CHECK_INTERVAL != 0:
+            return
+        if len(self._active_poachers()) >= POACHER_MAX_ACTIVE:
+            return
+        if random.random() > POACHER_EVENT_CHANCE:
+            return
+
+        target = self._select_poacher_target()
+        if not target:
+            return
+
+        from entities.poachers import Poacher
+
+        zone_id = self._zone_id_for(target.x, target.y)
+        spawn_x, spawn_y = self._poacher_spawn_point(target)
+        exit_point = (spawn_x, spawn_y)
+        poacher = Poacher(
+            self.next_entity_id(),
+            f"Poacher {self.poacher_spawns_total + 1}",
+            spawn_x,
+            spawn_y,
+            target=target,
+            zone_id=zone_id,
+            exit_point=exit_point,
+            display_output=self.display_output
+        )
+
+        self.add_entity(poacher)
+        self.poacher_spawns_total += 1
+        self.poacher_incidents_by_zone[zone_id] = (
+            self.poacher_incidents_by_zone.get(zone_id, 0) + 1
+        )
+
+        assigned_ranger = self._nearest_ranger(target.x, target.y)
+        event_bus.emit(Event.POACHER_SPOTTED, {
+            "poacher": poacher,
+            "zone_id": zone_id,
+            "target": target,
+            "assigned_ranger": assigned_ranger
+        })
+
+        if self.poacher_incidents_by_zone[zone_id] > POACHER_CAMP_THRESHOLD:
+            self._ensure_temporary_camp(zone_id, assigned_ranger)
+
+    def _active_poachers(self):
+        return [
+            entity for entity in self.entities
+            if entity.__class__.__name__ == "Poacher"
+            and getattr(entity, "resolution", None) is None
+        ]
+
+    def _select_poacher_target(self):
+        from entities.animals import Carnivore
+
+        candidates = [
+            entity for entity in self.entities
+            if getattr(entity, "is_alive", False)
+            and hasattr(entity, "thirst")
+            and not isinstance(entity, Carnivore)
+        ]
+        if not candidates:
+            return None
+
+        priority = {
+            "Rhino": 5,
+            "Elephant": 4,
+            "Buffalo": 3,
+            "Giraffe": 2,
+            "Zebra": 2,
+        }
+        weights = [priority.get(entity.__class__.__name__, 1) for entity in candidates]
+        return random.choices(candidates, weights=weights, k=1)[0]
+
+    def _poacher_spawn_point(self, target):
+        candidates = [
+            (0, target.y),
+            (GRID_WIDTH - 1, target.y),
+            (target.x, 0),
+            (target.x, GRID_HEIGHT - 1),
+        ]
+        spawn_x, spawn_y = min(
+            candidates,
+            key=lambda point: abs(point[0] - target.x) + abs(point[1] - target.y)
+        )
+        if spawn_x in {0, GRID_WIDTH - 1}:
+            spawn_y += random.randint(-4, 4)
+        else:
+            spawn_x += random.randint(-4, 4)
+        return self._clamp_grid(spawn_x, GRID_WIDTH), self._clamp_grid(spawn_y, GRID_HEIGHT)
+
+    def _zone_id_for(self, x, y):
+        zone_x = self._clamp_grid(x, GRID_WIDTH) // POACHER_ZONE_SIZE
+        zone_y = self._clamp_grid(y, GRID_HEIGHT) // POACHER_ZONE_SIZE
+        return f"{zone_x}:{zone_y}"
+
+    def _zone_center(self, zone_id):
+        zone_x, zone_y = [int(part) for part in zone_id.split(":")]
+        center_x = zone_x * POACHER_ZONE_SIZE + POACHER_ZONE_SIZE // 2
+        center_y = zone_y * POACHER_ZONE_SIZE + POACHER_ZONE_SIZE // 2
+        return self._clamp_grid(center_x, GRID_WIDTH), self._clamp_grid(center_y, GRID_HEIGHT)
+
+    def _nearest_ranger(self, x, y):
+        rangers = [
+            entity for entity in self.entities
+            if getattr(entity, "is_alive", False)
+            and entity.__class__.__name__ == "Ranger"
+        ]
+        if not rangers:
+            return None
+        return min(rangers, key=lambda ranger: abs(ranger.x - x) + abs(ranger.y - y))
+
+    def _ensure_temporary_camp(self, zone_id, assigned_ranger=None):
+        camp = self.temporary_camps.get(zone_id)
+        expires_at = self.tick_count + POACHER_CAMP_DURATION_TICKS
+        if camp:
+            camp.expires_at_tick = max(camp.expires_at_tick, expires_at)
+            if assigned_ranger and hasattr(assigned_ranger, "assign_camp"):
+                assigned_ranger.assign_camp(camp)
+            return camp
+
+        from environment.nature import TemporaryRangerCamp
+
+        x, y = self._zone_center(zone_id)
+        camp = TemporaryRangerCamp(
+            f"Temporary Camp {zone_id}",
+            x,
+            y,
+            zone_id=zone_id,
+            expires_at_tick=expires_at
+        )
+        camp.display_output = self.display_output
+        self.temporary_camps[zone_id] = camp
+        self.temporary_camps_created += 1
+        self.add_environment_component(camp)
+
+        if assigned_ranger and hasattr(assigned_ranger, "assign_camp"):
+            assigned_ranger.assign_camp(camp)
+
+        event_bus.emit(Event.RANGER_CAMP_CREATED, {
+            "camp": camp,
+            "zone_id": zone_id,
+            "ranger": assigned_ranger
+        })
+        return camp
+
+    def _expire_temporary_camps(self):
+        for zone_id, camp in list(self.temporary_camps.items()):
+            if self.tick_count < camp.expires_at_tick:
+                continue
+
+            self._remove_environment_component(camp)
+            del self.temporary_camps[zone_id]
+            for entity in self.entities:
+                if hasattr(entity, "clear_camp"):
+                    entity.clear_camp(camp)
+            event_bus.emit(Event.RANGER_CAMP_EXPIRED, {
+                "camp": camp,
+                "zone_id": zone_id
+            })
+
+    def _remove_environment_component(self, component):
+        for env in list(self.environments):
+            if env is component:
+                self.environments.remove(env)
+                return True
+            if self._remove_from_zone(env, component):
+                return True
+        return False
+
+    def _remove_from_zone(self, zone, component):
+        children = getattr(zone, "_children", None)
+        if children is None:
+            return False
+        if component in children:
+            zone.remove(component)
+            return True
+        return any(self._remove_from_zone(child, component) for child in list(children))
 
     def _try_reproduction(self):
         if self.tick_count % REPRODUCTION_CHECK_INTERVAL != 0:
@@ -405,6 +629,17 @@ class SimulationEngine(threading.Thread):
             "births_by_species": dict(sorted(self.births_by_species.items())),
             "deaths_by_species": dict(sorted(self.deaths_by_species.items())),
             "deaths_by_cause": dict(sorted(self.deaths_by_cause.items())),
+            "active_poachers": len(self._active_poachers()),
+            "poacher_spawns_total": self.poacher_spawns_total,
+            "poachers_arrested_total": self.poachers_arrested_total,
+            "poachers_escaped_total": self.poachers_escaped_total,
+            "poached_animals_total": self.poached_animals_total,
+            "poachers_arrested_this_tick": self.poachers_arrested_this_tick,
+            "poachers_escaped_this_tick": self.poachers_escaped_this_tick,
+            "poached_animals_this_tick": self.poached_animals_this_tick,
+            "poacher_incidents_by_zone": dict(sorted(self.poacher_incidents_by_zone.items())),
+            "temporary_camps": len(self.temporary_camps),
+            "temporary_camps_created": self.temporary_camps_created,
         }
 
     def snapshot(self):
@@ -453,6 +688,14 @@ class SimulationEngine(threading.Thread):
                     "births_by_species": dict(sorted(self.births_by_species.items())),
                     "deaths_by_species": dict(sorted(self.deaths_by_species.items())),
                     "deaths_by_cause": dict(sorted(self.deaths_by_cause.items())),
+                    "active_poachers": len(self._active_poachers()),
+                    "poacher_spawns_total": self.poacher_spawns_total,
+                    "poachers_arrested_total": self.poachers_arrested_total,
+                    "poachers_escaped_total": self.poachers_escaped_total,
+                    "poached_animals_total": self.poached_animals_total,
+                    "poacher_incidents_by_zone": dict(sorted(self.poacher_incidents_by_zone.items())),
+                    "temporary_camps": len(self.temporary_camps),
+                    "temporary_camps_created": self.temporary_camps_created,
                 }
             }
 
@@ -484,6 +727,8 @@ class SimulationEngine(threading.Thread):
             "ticks_dead": getattr(entity, "ticks_dead", 0),
             "birth_tick": getattr(entity, "birth_tick", None),
             "death_cause": getattr(entity, "death_cause", None),
+            "zone_id": getattr(entity, "zone_id", None),
+            "resolution": getattr(entity, "resolution", None),
         }
 
     def _active_species(self, entity_snapshots):
@@ -502,6 +747,8 @@ class SimulationEngine(threading.Thread):
             return "ranger"
         if species == "SafariJeep":
             return "vehicle"
+        if species == "Poacher":
+            return "poacher"
         if species in {"Lion", "Cheetah", "Leopard"}:
             return "carnivore"
         if species in {"BushBaby", "Meerkat", "Pangolin"}:
@@ -578,6 +825,8 @@ class SimulationEngine(threading.Thread):
                 "x": obj.x,
                 "y": obj.y,
                 "land_type": getattr(obj, "land_type", "land"),
+                "zone_id": getattr(obj, "zone_id", None),
+                "expires_at_tick": getattr(obj, "expires_at_tick", None),
             }
             for obj in self._environment_leaves()
             if hasattr(obj, "land_type")

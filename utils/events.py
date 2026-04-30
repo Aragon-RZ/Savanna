@@ -26,6 +26,12 @@ from abc import ABC, abstractmethod
 class Event:
     ANIMAL_DIED      = "animal_died"       # payload: { "entity": animal, "cause": str }
     ANIMAL_BORN      = "animal_born"       # payload: { "entity": animal, "parent_a": animal, "parent_b": animal }
+    POACHER_SPOTTED  = "poacher_spotted"   # payload: { "poacher": poacher, "zone_id": str, "target": animal }
+    POACHER_ARRESTED = "poacher_arrested"  # payload: { "poacher": poacher, "ranger": ranger }
+    POACHER_ESCAPED  = "poacher_escaped"   # payload: { "poacher": poacher }
+    POACHING_ATTACK  = "poaching_attack"   # payload: { "poacher": poacher, "target": animal }
+    RANGER_CAMP_CREATED = "ranger_camp_created"  # payload: { "camp": camp, "zone_id": str, "ranger": ranger }
+    RANGER_CAMP_EXPIRED = "ranger_camp_expired"  # payload: { "camp": camp, "zone_id": str }
     WATER_SPOT_FREED = "water_spot_freed"  # payload: { "environment": hole, "freed_by": animal }
     GRAZING_SPOT_FREED = "grazing_spot_freed"  # payload: { "environment": area, "freed_by": animal }
     ANIMAL_HUNTING   = "animal_hunting"    # payload: { "predator": animal, "prey": animal }
