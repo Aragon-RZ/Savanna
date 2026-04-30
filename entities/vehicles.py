@@ -123,6 +123,51 @@ class ChaseStrategy:
             jeep.state = "ON TOUR"
 
 
+class CampingTripStrategy:
+    """A multi-day premium jeep trip that camps in a remote zone."""
+    def __init__(self, schedule_index, trip):
+        self.schedule_index = schedule_index
+        self.name = trip.get("name", "Camping Trip")
+        self.start_tick = trip["start_tick"]
+        self.end_tick = trip["end_tick"]
+        self.camp_x = trip["camp_x"]
+        self.camp_y = trip["camp_y"]
+        self.radius = trip.get("radius", 9)
+        self.waypoint = None
+
+    def execute(self, jeep):
+        if jeep.current_tick >= self.end_tick:
+            jeep.completed_long_trips.add(self.schedule_index)
+            jeep.active_long_trip = None
+            jeep.behavior = ReturnToBaseStrategy()
+            jeep.state = "RETURNING FROM CAMP"
+            jeep.behavior.execute(jeep)
+            return
+
+        day = max(1, ((jeep.current_tick - self.start_tick) // 24) + 1)
+        jeep.state = f"CAMPING DAY {day}"
+
+        if abs(jeep.x - self.camp_x) + abs(jeep.y - self.camp_y) > self.radius:
+            jeep.move_towards(self.camp_x, self.camp_y, jeep.CRUISE_STEP)
+            return
+
+        target_x, target_y = self._current_waypoint(jeep)
+        jeep.move_towards(target_x, target_y, jeep.PATROL_STEP)
+
+    def _current_waypoint(self, jeep):
+        if self.waypoint:
+            distance = abs(jeep.x - self.waypoint[0]) + abs(jeep.y - self.waypoint[1])
+            if distance > 3:
+                return self.waypoint
+
+        min_x = max(0, self.camp_x - self.radius)
+        max_x = min(GRID_WIDTH - 1, self.camp_x + self.radius)
+        min_y = max(0, self.camp_y - self.radius)
+        max_y = min(GRID_HEIGHT - 1, self.camp_y + self.radius)
+        self.waypoint = (random.randint(min_x, max_x), random.randint(min_y, max_y))
+        return self.waypoint
+
+
 class ReturnToBaseStrategy:
     """Jeep heads back to base at end of tour."""
     def execute(self, jeep):
@@ -172,7 +217,8 @@ class SafariJeep(threading.Thread, EventListener):
 
     def __init__(self, name: str, x: int = BASE_X, y: int = BASE_Y,
              zone_x: int = 5, zone_y: int = 5, zone_radius: int = 10,
-             display_output: bool = True, seat_capacity: int = 6):
+             display_output: bool = True, seat_capacity: int = 6,
+             long_trip_schedule=None):
         threading.Thread.__init__(self)
         self.name = name
         self.id = ""
@@ -188,6 +234,7 @@ class SafariJeep(threading.Thread, EventListener):
         self.fuel_level = 160
         self.fuel_low_threshold = 35
         self.minimum_tour_fuel = 90
+        self.minimum_long_trip_fuel = 120
         self.fuel_burn_rate = 0.16
         self.refuel_rate = 40
         self.behavior = None
@@ -196,10 +243,14 @@ class SafariJeep(threading.Thread, EventListener):
         self.display_output = display_output
         self._lock = threading.Lock()
         self.current_hour = 0
+        self.current_tick = 0
         self.known_entities = []
         self.zone_x = zone_x        # 👈 new
         self.zone_y = zone_y        # 👈 new
         self.zone_radius = zone_radius  # 👈 new
+        self.long_trip_schedule = long_trip_schedule or []
+        self.completed_long_trips = set()
+        self.active_long_trip = None
 
         event_bus.subscribe(Event.ANIMAL_HUNTING,   self)
         event_bus.subscribe(Event.ANIMAL_DIED,      self)
@@ -207,6 +258,8 @@ class SafariJeep(threading.Thread, EventListener):
     def update(self, current_hour, entities):
         """Engine calls this every tick to sync the hour."""
         self.current_hour = current_hour
+        if self.engine_ref:
+            self.current_tick = getattr(self.engine_ref, "tick_count", self.current_tick)
         self.known_entities = entities
 
     def on_event(self, event_type: str, payload: dict):
@@ -215,7 +268,7 @@ class SafariJeep(threading.Thread, EventListener):
             touring, _ = on_tour(self.current_hour)
             if not touring:
                 return
-            if isinstance(self.behavior, (ChaseStrategy, RefuelStrategy)):
+            if isinstance(self.behavior, (ChaseStrategy, RefuelStrategy, CampingTripStrategy)):
                 return
             if self.needs_refuel():
                 return
@@ -245,13 +298,25 @@ class SafariJeep(threading.Thread, EventListener):
                 continue
 
             with self._lock:
+                if self.engine_ref:
+                    self.current_tick = getattr(self.engine_ref, "tick_count", self.current_tick)
                 touring, nocturnal = on_tour(self.current_hour)
+                camping = isinstance(self.behavior, CampingTripStrategy)
+                long_trip = self._scheduled_long_trip()
 
-                if self.needs_refuel() and not isinstance(self.behavior, RefuelStrategy):
+                if self.needs_refuel() and not camping and not isinstance(self.behavior, RefuelStrategy):
                     self.start_refuelling()
 
                 if isinstance(self.behavior, RefuelStrategy):
                     pass
+                elif camping:
+                    pass
+                elif long_trip:
+                    schedule_index, trip = long_trip
+                    if self.fuel_level >= self.minimum_long_trip_fuel:
+                        self.depart_long_trip(schedule_index, trip)
+                    else:
+                        self.start_refuelling()
                 elif touring:
                     if not self.is_active_tour():
                         if self.fuel_level >= self.minimum_tour_fuel:
@@ -289,6 +354,15 @@ class SafariJeep(threading.Thread, EventListener):
         self.behavior = PatrolRouteStrategy(self.zone_x, self.zone_y, self.zone_radius)
         self.state = "ON TOUR"
 
+    def depart_long_trip(self, schedule_index, trip):
+        self.sightings = 0
+        self.seats_taken = random.randint(max(1, self.seat_capacity - 2), self.seat_capacity)
+        self.active_long_trip = dict(trip)
+        self.behavior = CampingTripStrategy(schedule_index, trip)
+        self.state = "CAMPING DAY 1"
+        self._print(f"\n⛺ [{self.name}] {trip.get('name', 'Camping Trip')} departing "
+                    f"until tick {trip['end_tick']}!")
+
     def start_refuelling(self):
         self.seats_taken = 0
         self.behavior = RefuelStrategy()
@@ -297,7 +371,15 @@ class SafariJeep(threading.Thread, EventListener):
         return self.fuel_level <= self.fuel_low_threshold
 
     def is_active_tour(self):
-        return isinstance(self.behavior, (PatrolRouteStrategy, ChaseStrategy))
+        return isinstance(self.behavior, (PatrolRouteStrategy, ChaseStrategy, CampingTripStrategy))
+
+    def _scheduled_long_trip(self):
+        for index, trip in enumerate(self.long_trip_schedule):
+            if index in self.completed_long_trips:
+                continue
+            if trip["start_tick"] <= self.current_tick < trip["end_tick"]:
+                return index, trip
+        return None
 
     def move_randomly_in_zone(self, zone_x, zone_y, radius):
         if self.fuel_level <= 0:

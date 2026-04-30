@@ -621,6 +621,10 @@ class SimulationEngine(threading.Thread):
         return max(0, min(limit - 1, int(value)))
 
     def _metrics_snapshot_unlocked(self):
+        vehicles = [
+            entity for entity in self.entities
+            if entity.__class__.__name__ == "SafariJeep"
+        ]
         return {
             "births_total": self.births_total,
             "deaths_total": self.deaths_total,
@@ -640,6 +644,11 @@ class SimulationEngine(threading.Thread):
             "poacher_incidents_by_zone": dict(sorted(self.poacher_incidents_by_zone.items())),
             "temporary_camps": len(self.temporary_camps),
             "temporary_camps_created": self.temporary_camps_created,
+            "vehicles_total": len(vehicles),
+            "active_long_trips": sum(
+                1 for vehicle in vehicles
+                if getattr(vehicle, "active_long_trip", None)
+            ),
         }
 
     def snapshot(self):
@@ -650,6 +659,7 @@ class SimulationEngine(threading.Thread):
                 e for e in entity_snapshots
                 if e["is_alive"] and e["category"] in {"herbivore", "carnivore", "insectivore"}
             ]
+            vehicles = [e for e in entity_snapshots if e["category"] == "vehicle"]
             thirst_values = [
                 e["thirst"] for e in alive_animals
                 if e["thirst"] is not None
@@ -696,6 +706,8 @@ class SimulationEngine(threading.Thread):
                     "poacher_incidents_by_zone": dict(sorted(self.poacher_incidents_by_zone.items())),
                     "temporary_camps": len(self.temporary_camps),
                     "temporary_camps_created": self.temporary_camps_created,
+                    "vehicles_total": len(vehicles),
+                    "active_long_trips": sum(1 for e in vehicles if e.get("active_trip_name")),
                 }
             }
 
@@ -723,6 +735,13 @@ class SimulationEngine(threading.Thread):
             "seat_capacity": getattr(entity, "seat_capacity", None),
             "fuel_level": getattr(entity, "fuel_level", None),
             "fuel_capacity": getattr(entity, "fuel_capacity", None),
+            "active_trip_name": self._active_trip_value(entity, "name"),
+            "trip_start_tick": self._active_trip_value(entity, "start_tick"),
+            "trip_end_tick": self._active_trip_value(entity, "end_tick"),
+            "trip_camp_x": self._active_trip_value(entity, "camp_x"),
+            "trip_camp_y": self._active_trip_value(entity, "camp_y"),
+            "scheduled_long_trips": list(getattr(entity, "long_trip_schedule", []) or []),
+            "completed_long_trips": len(getattr(entity, "completed_long_trips", []) or []),
             "territory": getattr(entity, "territory", None),
             "ticks_dead": getattr(entity, "ticks_dead", 0),
             "birth_tick": getattr(entity, "birth_tick", None),
@@ -730,6 +749,12 @@ class SimulationEngine(threading.Thread):
             "zone_id": getattr(entity, "zone_id", None),
             "resolution": getattr(entity, "resolution", None),
         }
+
+    def _active_trip_value(self, entity, key):
+        trip = getattr(entity, "active_long_trip", None)
+        if isinstance(trip, dict):
+            return trip.get(key)
+        return None
 
     def _active_species(self, entity_snapshots):
         counts = {}

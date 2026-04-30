@@ -6,7 +6,7 @@ def main():
     builder = SafariBuilder(max_ticks=240)
 
     #uses Safaribuuilder to create the environemnt, spawn animals and configure the simulaiton 
-    
+
     engine = (builder.build_environment() #creates the watering hole 
                      .add_zebras(10)      # Spawn a big herd!
                      .add_elephants(2)

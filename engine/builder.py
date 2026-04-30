@@ -254,10 +254,42 @@ class SafariBuilder:
             jeep = SafariJeep(name=f"Jeep {i+1}", x=start_x, y=start_y,
                             zone_x=zone_x, zone_y=zone_y, zone_radius=radius,
                             display_output=self.display_output,
-                            seat_capacity=random.choice([6, 8, 10]))
+                            seat_capacity=random.choice([6, 8, 10]),
+                            long_trip_schedule=self._camping_schedule_for_jeep(i))
             jeep.engine_ref = self.engine
             jeep.known_entities = self.engine.entities
             if self.auto_start_workers:
                 jeep.start()
             self.engine.add_entity(jeep)
         return self
+
+    def _camping_schedule_for_jeep(self, jeep_index):
+        """Two default 2-3 day camping expeditions across a 10-day run."""
+        schedules = [
+            {
+                "name": "Camping Expedition",
+                "start_tick": 48,
+                "end_tick": 108,
+                "camp_x": 26,
+                "camp_y": 68,
+                "radius": 10,
+            },
+            {
+                "name": "Camping Expedition",
+                "start_tick": 144,
+                "end_tick": 204,
+                "camp_x": 74,
+                "camp_y": 46,
+                "radius": 10,
+            },
+        ]
+        if jeep_index >= len(schedules):
+            return []
+
+        trip = dict(schedules[jeep_index])
+        if trip["start_tick"] >= self.engine.max_ticks:
+            return []
+        trip["end_tick"] = min(trip["end_tick"], self.engine.max_ticks)
+        if trip["end_tick"] - trip["start_tick"] < 24:
+            return []
+        return [trip]

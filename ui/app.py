@@ -224,6 +224,7 @@ class SavannaApp(tk.Tk):
         style.configure("Toolbar.TFrame", padding=8)
         style.configure("Metric.TLabel", padding=(0, 2))
         style.configure("Title.TLabel", font=("Helvetica", 15, "bold"))
+        style.configure("Section.TLabel", font=("Helvetica", 12, "bold"))
         style.configure("Small.TLabel", font=("Helvetica", 10))
 
     def _build_layout(self):
@@ -290,61 +291,230 @@ class SavannaApp(tk.Tk):
 
         side = ttk.Frame(body, padding=(8, 10, 10, 10))
         side.columnconfigure(0, weight=1)
-        side.rowconfigure(5, weight=1)
-        side.rowconfigure(7, weight=1)
-        body.add(side, weight=1)
+        side.rowconfigure(0, weight=1)
+        body.add(side, weight=2)
 
-        metrics = ttk.LabelFrame(side, text="Status", padding=10)
+        self.side_tabs = ttk.Notebook(side)
+        self.side_tabs.grid(row=0, column=0, sticky="nsew")
+
+        overview_tab = ttk.Frame(self.side_tabs, padding=8)
+        resources_tab = ttk.Frame(self.side_tabs, padding=8)
+        entities_tab = ttk.Frame(self.side_tabs, padding=8)
+        events_tab = ttk.Frame(self.side_tabs, padding=8)
+        controls_tab = ttk.Frame(self.side_tabs, padding=8)
+        self.side_tabs.add(overview_tab, text="Overview")
+        self.side_tabs.add(resources_tab, text="Resources")
+        self.side_tabs.add(entities_tab, text="Entities")
+        self.side_tabs.add(events_tab, text="Events")
+        self.side_tabs.add(controls_tab, text="Add")
+
+        overview_tab.columnconfigure(0, weight=1)
+        overview_tab.rowconfigure(2, weight=1)
+
+        metrics = ttk.LabelFrame(overview_tab, text="Status", padding=10)
         metrics.grid(row=0, column=0, sticky="ew")
-        for index, key in enumerate([
+        metric_keys = [
             "Run",
             "Tick",
             "Hour",
             "Weather",
             "Entities",
             "Alive",
-            "Births",
-            "Deaths",
-            "Poachers",
-            "Arrests",
-            "Poached",
+            "Vehicles",
+            "Long trips",
             "Herbivores",
             "Carnivores",
             "Insectivores",
             "Avg thirst",
             "Avg hunger",
-            "Water",
-            "Grazing",
-            "Insect food",
+            "Births",
+            "Deaths",
+            "Births tick",
+            "Deaths tick",
+            "Poachers active",
+            "Poacher spawns",
+            "Arrests",
+            "Escapes",
+            "Poached",
+            "Temp camps",
+            "Camps made",
+            "Water spots",
+            "Grazing spots",
+            "Insect spots",
             "Buildings",
-        ]):
+        ]
+        split_at = (len(metric_keys) + 1) // 2
+        for index, key in enumerate(metric_keys):
+            column_offset = 0 if index < split_at else 2
+            row = index if index < split_at else index - split_at
             ttk.Label(metrics, text=key, style="Metric.TLabel").grid(
-                row=index, column=0, sticky="w"
+                row=row, column=column_offset, sticky="w", padx=(0, 6)
             )
             var = tk.StringVar(value="-")
             self.summary_vars[key] = var
             ttk.Label(metrics, textvariable=var, style="Metric.TLabel").grid(
-                row=index, column=1, sticky="e", padx=(24, 0)
+                row=row, column=column_offset + 1, sticky="e", padx=(0, 14)
             )
         metrics.columnconfigure(1, weight=1)
+        metrics.columnconfigure(3, weight=1)
 
-        ttk.Label(side, text="Active Species", style="Title.TLabel").grid(
-            row=1, column=0, sticky="w", pady=(12, 6)
-        )
+        species_box = ttk.LabelFrame(overview_tab, text="Active Species", padding=8)
+        species_box.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        species_box.columnconfigure(0, weight=1)
+        species_box.rowconfigure(0, weight=1)
         self.species_table = ttk.Treeview(
-            side,
+            species_box,
             columns=("species", "count"),
             show="headings",
-            height=5
+            height=6
         )
         self.species_table.heading("species", text="Species")
         self.species_table.heading("count", text="Count")
-        self.species_table.column("species", width=150, anchor="w", stretch=True)
-        self.species_table.column("count", width=60, anchor="e", stretch=False)
-        self.species_table.grid(row=2, column=0, sticky="ew")
+        self.species_table.column("species", width=180, anchor="w", stretch=True)
+        self.species_table.column("count", width=70, anchor="e", stretch=False)
+        self.species_table.grid(row=0, column=0, sticky="nsew")
+        species_scroll = ttk.Scrollbar(species_box, orient=tk.VERTICAL, command=self.species_table.yview)
+        species_scroll.grid(row=0, column=1, sticky="ns")
+        self.species_table.configure(yscrollcommand=species_scroll.set)
 
-        spawner = ttk.LabelFrame(side, text="Add Object", padding=10)
-        spawner.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+        breakdown_box = ttk.LabelFrame(overview_tab, text="Engine Details", padding=8)
+        breakdown_box.grid(row=2, column=0, sticky="nsew", pady=(10, 0))
+        breakdown_box.columnconfigure(0, weight=1)
+        breakdown_box.rowconfigure(0, weight=1)
+        self.breakdown_table = ttk.Treeview(
+            breakdown_box,
+            columns=("metric", "value"),
+            show="headings",
+            height=7
+        )
+        self.breakdown_table.heading("metric", text="Metric")
+        self.breakdown_table.heading("value", text="Value")
+        self.breakdown_table.column("metric", width=150, anchor="w", stretch=True)
+        self.breakdown_table.column("value", width=150, anchor="w", stretch=True)
+        self.breakdown_table.grid(row=0, column=0, sticky="nsew")
+        breakdown_scroll = ttk.Scrollbar(breakdown_box, orient=tk.VERTICAL, command=self.breakdown_table.yview)
+        breakdown_scroll.grid(row=0, column=1, sticky="ns")
+        self.breakdown_table.configure(yscrollcommand=breakdown_scroll.set)
+
+        resources_tab.columnconfigure(0, weight=1)
+        resources_tab.rowconfigure(1, weight=1)
+        resources_tab.rowconfigure(3, weight=1)
+        ttk.Label(resources_tab, text="Shared Resources", style="Section.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 6)
+        )
+        resource_wrap = ttk.Frame(resources_tab)
+        resource_wrap.grid(row=1, column=0, sticky="nsew")
+        resource_wrap.columnconfigure(0, weight=1)
+        resource_wrap.rowconfigure(0, weight=1)
+        self.resource_table = ttk.Treeview(
+            resource_wrap,
+            columns=("kind", "name", "use", "free", "occupants"),
+            show="headings",
+            height=10
+        )
+        for column, heading, width, anchor in [
+            ("kind", "Kind", 88, "w"),
+            ("name", "Name", 150, "w"),
+            ("use", "Use", 70, "e"),
+            ("free", "Free", 56, "e"),
+            ("occupants", "Occupants", 180, "w"),
+        ]:
+            self.resource_table.heading(column, text=heading)
+            self.resource_table.column(column, width=width, anchor=anchor, stretch=True)
+        self.resource_table.grid(row=0, column=0, sticky="nsew")
+        resource_scroll = ttk.Scrollbar(resource_wrap, orient=tk.VERTICAL, command=self.resource_table.yview)
+        resource_scroll.grid(row=0, column=1, sticky="ns")
+        self.resource_table.configure(yscrollcommand=resource_scroll.set)
+
+        ttk.Label(resources_tab, text="Buildings & Camps", style="Section.TLabel").grid(
+            row=2, column=0, sticky="w", pady=(12, 6)
+        )
+        land_wrap = ttk.Frame(resources_tab)
+        land_wrap.grid(row=3, column=0, sticky="nsew")
+        land_wrap.columnconfigure(0, weight=1)
+        land_wrap.rowconfigure(0, weight=1)
+        self.land_table = ttk.Treeview(
+            land_wrap,
+            columns=("kind", "name", "pos", "details"),
+            show="headings",
+            height=7
+        )
+        for column, heading, width, anchor in [
+            ("kind", "Kind", 110, "w"),
+            ("name", "Name", 160, "w"),
+            ("pos", "Pos", 70, "w"),
+            ("details", "Details", 180, "w"),
+        ]:
+            self.land_table.heading(column, text=heading)
+            self.land_table.column(column, width=width, anchor=anchor, stretch=True)
+        self.land_table.grid(row=0, column=0, sticky="nsew")
+        land_scroll = ttk.Scrollbar(land_wrap, orient=tk.VERTICAL, command=self.land_table.yview)
+        land_scroll.grid(row=0, column=1, sticky="ns")
+        self.land_table.configure(yscrollcommand=land_scroll.set)
+
+        entities_tab.columnconfigure(0, weight=1)
+        entities_tab.rowconfigure(0, weight=1)
+        entity_wrap = ttk.Frame(entities_tab)
+        entity_wrap.grid(row=0, column=0, sticky="nsew")
+        entity_wrap.columnconfigure(0, weight=1)
+        entity_wrap.rowconfigure(0, weight=1)
+        self.entity_table = ttk.Treeview(
+            entity_wrap,
+            columns=("name", "species", "state", "pos", "needs", "details"),
+            show="headings",
+            height=18
+        )
+        for column, heading, width, anchor in [
+            ("name", "Name", 130, "w"),
+            ("species", "Type", 92, "w"),
+            ("state", "State", 140, "w"),
+            ("pos", "Pos", 62, "w"),
+            ("needs", "Needs", 116, "w"),
+            ("details", "Details", 190, "w"),
+        ]:
+            self.entity_table.heading(column, text=heading)
+            self.entity_table.column(column, width=width, anchor=anchor, stretch=True)
+        self.entity_table.grid(row=0, column=0, sticky="nsew")
+        entity_scroll_y = ttk.Scrollbar(entity_wrap, orient=tk.VERTICAL, command=self.entity_table.yview)
+        entity_scroll_y.grid(row=0, column=1, sticky="ns")
+        entity_scroll_x = ttk.Scrollbar(entity_wrap, orient=tk.HORIZONTAL, command=self.entity_table.xview)
+        entity_scroll_x.grid(row=1, column=0, sticky="ew")
+        self.entity_table.configure(
+            yscrollcommand=entity_scroll_y.set,
+            xscrollcommand=entity_scroll_x.set
+        )
+
+        events_tab.columnconfigure(0, weight=1)
+        events_tab.rowconfigure(0, weight=1)
+        events_wrap = ttk.Frame(events_tab)
+        events_wrap.grid(row=0, column=0, sticky="nsew")
+        events_wrap.columnconfigure(0, weight=1)
+        events_wrap.rowconfigure(0, weight=1)
+        self.events_list = tk.Listbox(
+            events_wrap,
+            height=18,
+            activestyle="none",
+            background="#fbfbf7",
+            foreground="#243018",
+            selectbackground="#dfe8c9",
+            selectforeground="#1f2a18",
+            highlightthickness=1,
+            highlightbackground="#c4c9b8",
+            font=("Helvetica", 10)
+        )
+        self.events_list.grid(row=0, column=0, sticky="nsew")
+        events_scroll_y = ttk.Scrollbar(events_wrap, orient=tk.VERTICAL, command=self.events_list.yview)
+        events_scroll_y.grid(row=0, column=1, sticky="ns")
+        events_scroll_x = ttk.Scrollbar(events_wrap, orient=tk.HORIZONTAL, command=self.events_list.xview)
+        events_scroll_x.grid(row=1, column=0, sticky="ew")
+        self.events_list.configure(
+            yscrollcommand=events_scroll_y.set,
+            xscrollcommand=events_scroll_x.set
+        )
+
+        controls_tab.columnconfigure(0, weight=1)
+        spawner = ttk.LabelFrame(controls_tab, text="Add Object", padding=10)
+        spawner.grid(row=0, column=0, sticky="ew")
         spawner.columnconfigure(1, weight=1)
         spawner.columnconfigure(3, weight=1)
 
@@ -410,38 +580,6 @@ class SavannaApp(tk.Tk):
         ttk.Button(spawner, text="Populate", command=self._populate_more).grid(
             row=3, column=3, sticky="ew", pady=(10, 0)
         )
-
-        ttk.Label(side, text="Entities", style="Title.TLabel").grid(
-            row=4, column=0, sticky="w", pady=(14, 6)
-        )
-        self.entity_table = ttk.Treeview(
-            side,
-            columns=("species", "state", "pos", "needs"),
-            show="headings",
-            height=12
-        )
-        for column, width in {
-            "species": 88,
-            "state": 118,
-            "pos": 62,
-            "needs": 112,
-        }.items():
-            self.entity_table.heading(column, text=column.title())
-            self.entity_table.column(column, width=width, anchor="w", stretch=True)
-        self.entity_table.grid(row=5, column=0, sticky="nsew")
-
-        ttk.Label(side, text="Events", style="Title.TLabel").grid(
-            row=6, column=0, sticky="w", pady=(14, 6)
-        )
-        self.events_list = tk.Listbox(
-            side,
-            height=8,
-            activestyle="none",
-            background="#fbfbf7",
-            highlightthickness=1,
-            highlightbackground="#c4c9b8"
-        )
-        self.events_list.grid(row=7, column=0, sticky="nsew")
 
     def _new_engine(self):
         self._detach_event_collector()
@@ -740,6 +878,8 @@ class SavannaApp(tk.Tk):
         self.last_snapshot = snapshot
         self._render_summary(snapshot)
         self._render_species(snapshot["summary"].get("active_species", {}))
+        self._render_breakdown(snapshot)
+        self._render_resources(snapshot)
         self._render_entities(snapshot["entities"])
         self._render_map(snapshot)
 
@@ -753,20 +893,18 @@ class SavannaApp(tk.Tk):
         if snapshot["is_running"] and snapshot["is_paused"]:
             status = "Paused"
 
-        water = "none"
-        if snapshot["water_holes"]:
-            hole = snapshot["water_holes"][0]
-            water = f"{hole['drinkers']}/{hole['capacity']}"
-
-        grazing = "none"
-        if snapshot.get("grazing_areas"):
-            area = snapshot["grazing_areas"][0]
-            grazing = f"{area['grazers']}/{area['capacity']}"
-
-        insect_food = "none"
-        if snapshot.get("insect_feeding_grounds"):
-            area = snapshot["insect_feeding_grounds"][0]
-            insect_food = f"{area['feeders']}/{area['capacity']}"
+        water = self._resource_total(snapshot.get("water_holes", []), "drinkers")
+        grazing = self._resource_total(snapshot.get("grazing_areas", []), "grazers")
+        insect_food = self._resource_total(
+            snapshot.get("insect_feeding_grounds", []),
+            "feeders"
+        )
+        vehicles = [
+            entity for entity in snapshot["entities"]
+            if entity["category"] == "vehicle"
+        ]
+        scheduled_trips = sum(len(v.get("scheduled_long_trips") or []) for v in vehicles)
+        completed_trips = sum(v.get("completed_long_trips", 0) for v in vehicles)
 
         values = {
             "Run": status,
@@ -775,41 +913,160 @@ class SavannaApp(tk.Tk):
             "Weather": snapshot["weather"],
             "Entities": str(summary["total_entities"]),
             "Alive": str(summary["alive_total"]),
-            "Births": str(summary.get("births_total", 0)),
-            "Deaths": str(summary.get("deaths_total", 0)),
-            "Poachers": str(summary.get("active_poachers", 0)),
-            "Arrests": str(summary.get("poachers_arrested_total", 0)),
-            "Poached": str(summary.get("poached_animals_total", 0)),
+            "Vehicles": str(summary.get("vehicles_total", len(vehicles))),
+            "Long trips": (
+                f"{summary.get('active_long_trips', 0)} active / "
+                f"{completed_trips}/{scheduled_trips} done"
+            ),
             "Herbivores": str(summary["alive_herbivores"]),
             "Carnivores": str(summary["alive_carnivores"]),
             "Insectivores": str(summary["alive_insectivores"]),
             "Avg thirst": str(summary["avg_thirst"]),
             "Avg hunger": str(summary["avg_hunger"]),
-            "Water": water,
-            "Grazing": grazing,
-            "Insect food": insect_food,
+            "Births": str(summary.get("births_total", 0)),
+            "Deaths": str(summary.get("deaths_total", 0)),
+            "Births tick": str(summary.get("births_this_tick", 0)),
+            "Deaths tick": str(summary.get("deaths_this_tick", 0)),
+            "Poachers active": str(summary.get("active_poachers", 0)),
+            "Poacher spawns": str(summary.get("poacher_spawns_total", 0)),
+            "Arrests": str(summary.get("poachers_arrested_total", 0)),
+            "Escapes": str(summary.get("poachers_escaped_total", 0)),
+            "Poached": str(summary.get("poached_animals_total", 0)),
+            "Temp camps": str(summary.get("temporary_camps", 0)),
+            "Camps made": str(summary.get("temporary_camps_created", 0)),
+            "Water spots": water,
+            "Grazing spots": grazing,
+            "Insect spots": insect_food,
             "Buildings": str(len(snapshot.get("land_objects", []))),
         }
         for key, value in values.items():
-            self.summary_vars[key].set(value)
+            if key in self.summary_vars:
+                self.summary_vars[key].set(value)
+
+    def _resource_total(self, items, used_key):
+        if not items:
+            return "none"
+        used = sum(item.get(used_key, 0) for item in items)
+        capacity = sum(item.get("capacity", 0) for item in items)
+        return f"{used}/{capacity}"
+
+    def _render_breakdown(self, snapshot):
+        self.breakdown_table.delete(*self.breakdown_table.get_children())
+        summary = snapshot["summary"]
+        rows = [
+            ("Births by species", self._format_counts(summary.get("births_by_species", {}))),
+            ("Deaths by species", self._format_counts(summary.get("deaths_by_species", {}))),
+            ("Deaths by cause", self._format_counts(summary.get("deaths_by_cause", {}))),
+            ("Poacher zones", self._format_counts(summary.get("poacher_incidents_by_zone", {}))),
+        ]
+
+        for entity in snapshot["entities"]:
+            if entity["category"] != "vehicle":
+                continue
+            for trip in entity.get("scheduled_long_trips") or []:
+                label = f"{entity['name']} trip"
+                value = (
+                    f"{trip.get('name', 'Camping')} "
+                    f"{trip.get('start_tick')}->{trip.get('end_tick')}"
+                )
+                rows.append((label, value))
+
+        for metric, value in rows:
+            self.breakdown_table.insert("", tk.END, values=(metric, value))
+
+    def _format_counts(self, counts):
+        if not counts:
+            return "-"
+        return ", ".join(f"{key}: {value}" for key, value in counts.items())
+
+    def _render_resources(self, snapshot):
+        self.resource_table.delete(*self.resource_table.get_children())
+        self.land_table.delete(*self.land_table.get_children())
+
+        for hole in snapshot.get("water_holes", []):
+            kind = "River" if hole.get("kind") == "River" else "Water"
+            self.resource_table.insert("", tk.END, values=(
+                kind,
+                hole["name"],
+                f"{hole['drinkers']}/{hole['capacity']}",
+                hole["free_spots"],
+                ", ".join(hole.get("drinker_names") or []) or "-",
+            ))
+
+        for area in snapshot.get("grazing_areas", []):
+            self.resource_table.insert("", tk.END, values=(
+                "Grazing",
+                area["name"],
+                f"{area['grazers']}/{area['capacity']}",
+                area["free_spots"],
+                ", ".join(area.get("grazer_names") or []) or "-",
+            ))
+
+        for area in snapshot.get("insect_feeding_grounds", []):
+            self.resource_table.insert("", tk.END, values=(
+                "Insects",
+                area["name"],
+                f"{area['feeders']}/{area['capacity']}",
+                area["free_spots"],
+                ", ".join(area.get("feeder_names") or []) or "-",
+            ))
+
+        for land_object in snapshot.get("land_objects", []):
+            land_type = land_object.get("land_type", "land").replace("_", " ").title()
+            details = "-"
+            if land_object.get("land_type") == "temporary_ranger_camp":
+                details = (
+                    f"zone {land_object.get('zone_id')} "
+                    f"until tick {land_object.get('expires_at_tick')}"
+                )
+            self.land_table.insert("", tk.END, values=(
+                land_type,
+                land_object["name"],
+                f"{land_object['x']},{land_object['y']}",
+                details,
+            ))
 
     def _render_entities(self, entities):
         self.entity_table.delete(*self.entity_table.get_children())
         ordered = sorted(entities, key=lambda e: (e["category"], e["species"], str(e["id"])))
         for entity in ordered:
-            needs = "-"
-            if entity["thirst"] is not None and entity["hunger"] is not None:
-                needs = f"T{entity['thirst']} H{entity['hunger']}"
-            elif entity["seat_capacity"] is not None:
-                needs = f"S {entity['seats_taken']}/{entity['seat_capacity']}"
-                if entity["fuel_capacity"] is not None:
-                    needs += f" F {entity['fuel_level']}/{entity['fuel_capacity']}"
+            needs = self._entity_needs(entity)
+            details = self._entity_details(entity)
             pos = f"{entity['x']},{entity['y']}"
             self.entity_table.insert(
                 "",
                 tk.END,
-                values=(entity["species"], entity["state"], pos, needs)
+                values=(entity["name"], entity["species"], entity["state"], pos, needs, details)
             )
+
+    def _entity_needs(self, entity):
+        if entity["thirst"] is not None and entity["hunger"] is not None:
+            return f"T{entity['thirst']} H{entity['hunger']}"
+        if entity["seat_capacity"] is not None:
+            seats = f"Riders {entity['seats_taken']}/{entity['seat_capacity']}"
+            if entity["fuel_capacity"] is not None:
+                seats += f" Fuel {entity['fuel_level']}/{entity['fuel_capacity']}"
+            return seats
+        return "-"
+
+    def _entity_details(self, entity):
+        if entity["category"] == "vehicle":
+            if entity.get("active_trip_name"):
+                return (
+                    f"{entity['active_trip_name']} to "
+                    f"{entity.get('trip_camp_x')},{entity.get('trip_camp_y')} "
+                    f"until {entity.get('trip_end_tick')}"
+                )
+            scheduled = len(entity.get("scheduled_long_trips") or [])
+            completed = entity.get("completed_long_trips", 0)
+            return f"Camping trips {completed}/{scheduled}"
+        if entity["category"] == "ranger":
+            return f"Territory {entity.get('territory') or '-'}"
+        if entity["category"] == "poacher":
+            return f"Zone {entity.get('zone_id') or '-'} {entity.get('resolution') or 'active'}"
+        if entity.get("death_cause"):
+            return entity["death_cause"]
+        return "-"
 
     def _render_species(self, species_counts):
         self.species_table.delete(*self.species_table.get_children())
@@ -859,12 +1116,40 @@ class SavannaApp(tk.Tk):
         for entity in snapshot["entities"]:
             self._draw_entity(canvas, entity, pad, map_width, map_height)
 
+        self._draw_weather_badge(canvas, snapshot, pad)
+
     def _map_geometry(self):
         canvas = self.map_canvas
         width = max(canvas.winfo_width(), 400)
         height = max(canvas.winfo_height(), 400)
         pad = 18
         return width, height, pad, width - pad * 2, height - pad * 2
+
+    def _draw_weather_badge(self, canvas, snapshot, pad):
+        weather = snapshot.get("weather", "CLEAR")
+        emoji = {
+            "CLEAR": "☀️",
+            "RAIN": "🌧️",
+            "DROUGHT": "🌵",
+            "STORM": "⛈️",
+        }.get(weather, "🌤️")
+        text_id = canvas.create_text(
+            pad + 10,
+            pad + 9,
+            text=f"{emoji} {weather.title()}",
+            anchor="nw",
+            fill="#243018",
+            font=("Helvetica", 13, "bold")
+        )
+        bbox = canvas.bbox(text_id)
+        if bbox:
+            background = canvas.create_rectangle(
+                bbox[0] - 7, bbox[1] - 4,
+                bbox[2] + 7, bbox[3] + 4,
+                fill="#fbfbf2",
+                outline="#a4ad8e"
+            )
+            canvas.tag_lower(background, text_id)
 
     def _sx(self, value, pad, map_width):
         return pad + (float(value) / max(GRID_WIDTH - 1, 1)) * map_width
@@ -896,7 +1181,7 @@ class SavannaApp(tk.Tk):
         y = self._sy(river["y"], pad, map_height)
         canvas.create_text(
             x + 14, y - 16,
-            text=f"{river['name']} {river['drinkers']}/{river['capacity']}",
+            text=river["name"],
             anchor="w",
             fill="#16506c",
             font=("Helvetica", 10, "bold")
@@ -914,7 +1199,7 @@ class SavannaApp(tk.Tk):
         )
         canvas.create_text(
             x + 16, y,
-            text=f"{hole['name']} {hole['drinkers']}/{hole['capacity']}",
+            text=hole["name"],
             anchor="w",
             fill="#1e4f6d",
             font=("Helvetica", 10, "bold")
@@ -939,7 +1224,7 @@ class SavannaApp(tk.Tk):
             )
         canvas.create_text(
             x + radius_x + 6, y,
-            text=f"{area['name']} {area['feeders']}/{area['capacity']}",
+            text=area["name"],
             anchor="w",
             fill="#5c4218",
             font=("Helvetica", 10, "bold")
@@ -1002,7 +1287,7 @@ class SavannaApp(tk.Tk):
         )
         canvas.create_text(
             x + radius_x + 6, y,
-            text=f"{area['name']} {area['grazers']}/{area['capacity']}",
+            text=area["name"],
             anchor="w",
             fill="#2f5b2a",
             font=("Helvetica", 10, "bold")
@@ -1024,6 +1309,8 @@ class SavannaApp(tk.Tk):
             "other": ("#6f7278", "#33363a"),
         }
         fill, outline = palette.get(category, palette["other"])
+        if category == "vehicle" and entity.get("active_trip_name"):
+            fill, outline = "#f08a3a", "#7a3d13"
         if not entity["is_alive"] or state == "DEAD":
             ticks_dead = entity.get("ticks_dead", 0)
             max_decay = 30
@@ -1087,6 +1374,25 @@ class SavannaApp(tk.Tk):
         elif category == "poacher":
             label = "P"
         canvas.create_text(x, y, text=label, fill="#ffffff", font=("Helvetica", 8, "bold"))
+
+        if category == "vehicle" and entity.get("seat_capacity") is not None:
+            riders = f"{entity.get('seats_taken', 0)}/{entity.get('seat_capacity', 0)}"
+            text_id = canvas.create_text(
+                x,
+                y + size + 11,
+                text=riders,
+                fill="#3f2b00",
+                font=("Helvetica", 8, "bold")
+            )
+            bbox = canvas.bbox(text_id)
+            if bbox:
+                background = canvas.create_rectangle(
+                    bbox[0] - 3, bbox[1] - 1,
+                    bbox[2] + 3, bbox[3] + 1,
+                    fill="#fff8df",
+                    outline="#d7b45c"
+                )
+                canvas.tag_lower(background, text_id)
 
     def _update_buttons(self):
         running = bool(self.engine and self.engine.is_alive())
