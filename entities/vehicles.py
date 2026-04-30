@@ -39,19 +39,36 @@ class PatrolRouteStrategy:
         self.zone_x = zone_x   # center of patrol zone
         self.zone_y = zone_y
         self.radius = radius   # how far from center to wander
+        self.spotted_this_tour = set()
 
     def execute(self, jeep):
         jeep.state = "ON TOUR"
-        jeep.move_randomly_in_zone(self.zone_x, self.zone_y, self.radius)
+        living = [
+            entity for entity in jeep.known_entities
+            if hasattr(entity, "is_alive") and entity.is_alive
+            and entity.__class__.__name__ not in ("Ranger", "SafariJeep")
+        ]
+
+        if living and random.random() < 0.7:
+            nearest = min(living, key=lambda e: abs(e.x - jeep.x) + abs(e.y - jeep.y))
+            target_x = max(self.zone_x - self.radius, min(self.zone_x + self.radius, nearest.x))
+            target_y = max(self.zone_y - self.radius, min(self.zone_y + self.radius, nearest.y))
+            jeep.move_towards(target_x, target_y, jeep.PATROL_STEP)
+        else:
+            jeep.move_randomly_in_zone(self.zone_x, self.zone_y, self.radius)
 
         # Passive sighting within zone
-        nearby = [e for e in jeep.known_entities
-                  if hasattr(e,'is_alive') and e.is_alive
-                  and hasattr(e,'state') 
-                  and e.__class__.__name__ not in ("Ranger","SafariJeep")
-                  and abs(e.x - jeep.x) + abs(e.y - jeep.y) <= 8]
+        nearby = [
+            entity for entity in jeep.known_entities
+            if hasattr(entity, "is_alive") and entity.is_alive
+            and hasattr(entity, "state")
+            and entity.__class__.__name__ not in ("Ranger", "SafariJeep")
+            and abs(entity.x - jeep.x) + abs(entity.y - jeep.y) <= 8
+            and entity.id not in self.spotted_this_tour
+        ]
         if nearby:
             spotted = nearby[0]
+            self.spotted_this_tour.add(spotted.id)
             jeep._print(f"   📷 [{jeep.name}] Tourists spotted: "
                         f"{spotted.name} ({spotted.state}) nearby!")
             jeep.sightings += 1
@@ -135,6 +152,7 @@ class SafariJeep(threading.Thread, EventListener):
         self.id = ""
         self.x = x
         self.y = y
+        self.engine_ref = None
         self.state = "PARKED"
         self.is_alive = True
         self.sightings = 0
@@ -196,6 +214,10 @@ class SafariJeep(threading.Thread, EventListener):
         self._print(f"🚙 [{self.name}] Safari jeep ready at base ({self.x}, {self.y})")
 
         while self.is_running:
+            if self.engine_ref and self.engine_ref.is_paused():
+                time.sleep(0.1)
+                continue
+
             with self._lock:
                 touring, nocturnal = on_tour(self.current_hour)
 

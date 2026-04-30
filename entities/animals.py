@@ -30,6 +30,7 @@ class Animal(Entity):
     def die(self, cause):
         self.is_alive = False
         self.state = "DEAD"
+        self.ticks_dead = 0
         self._print(f"💀 {self.name} died! Cause: {cause}.")
         event_bus.emit(Event.ANIMAL_DIED, {"entity": self, "cause": cause})
 
@@ -112,10 +113,29 @@ class Animal(Entity):
         ticks_until_hunger_death = MAX_HUNGER - self.hunger
         return ticks_until_thirst_death <= ticks_until_hunger_death
 
+    def _avoid_water_centers(self):
+        if self.state in ["SEEKING_WATER", "DRINKING", "WAITING_IN_LINE", "DESPERATE"]:
+            return
+        if not self.target_water:
+            return
+
+        waters = self.target_water if isinstance(self.target_water, list) else [self.target_water]
+        for water in waters:
+            if abs(self.x - water.x) + abs(self.y - water.y) >= 2:
+                continue
+
+            dx = self.x - water.x
+            dy = self.y - water.y
+            if dx == 0 and dy == 0:
+                dx = 1
+            self.x = max(0, min(GRID_WIDTH - 1, self.x + (1 if dx > 0 else -1)))
+            self.y = max(0, min(GRID_HEIGHT - 1, self.y + (1 if dy > 0 else -1)))
+
     def move_randomly(self):
         # ✅ FIXED — clamped to grid boundaries
         self.x = max(0, min(GRID_WIDTH - 1,  self.x + random.choice([-1, 0, 1])))
         self.y = max(0, min(GRID_HEIGHT - 1, self.y + random.choice([-1, 0, 1])))
+        self._avoid_water_centers()
 
     def move_towards(self, target_x, target_y):
         # ✅ FIXED — clamped to grid boundaries
@@ -125,6 +145,7 @@ class Animal(Entity):
         elif self.y > target_y: self.y -= 1
         self.x = max(0, min(GRID_WIDTH - 1, self.x))
         self.y = max(0, min(GRID_HEIGHT - 1, self.y))
+        self._avoid_water_centers()
 
 
 class Herbivore(Animal):

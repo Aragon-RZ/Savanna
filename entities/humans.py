@@ -31,6 +31,7 @@ class RangerStrategy:
         ranger.state = "PATROLLING"
         ranger.x = max(0, min(GRID_WIDTH  - 1, ranger.x + random.choice([-1, 0, 1])))
         ranger.y = max(0, min(GRID_HEIGHT - 1, ranger.y + random.choice([-1, 0, 1])))
+        ranger.avoid_water_centers()
 
 class RespondStrategy:
     """
@@ -82,6 +83,8 @@ class Ranger(threading.Thread, EventListener):
         self.id = ""      
         self.x = x
         self.y = y
+        self.engine_ref = None
+        self.target_water = None
         self.territory = territory or ("south" if y >= GRID_HEIGHT // 2 else "north")
         self.display_output = display_output
         self.state = "PATROLLING"
@@ -139,6 +142,10 @@ class Ranger(threading.Thread, EventListener):
         self._print(f"🌿  {self.name} started patrol at ({self.x}, {self.y})")
 
         while self.is_running:
+            if self.engine_ref and self.engine_ref.is_paused():
+                time.sleep(0.1)
+                continue
+
             with self._lock:
                 self.behavior.execute(self)
 
@@ -151,6 +158,22 @@ class Ranger(threading.Thread, EventListener):
         self.is_running = False
         event_bus.unsubscribe(Event.ANIMAL_DIED, self)
         event_bus.unsubscribe(Event.ANIMAL_DESPERATE, self)
+
+    def avoid_water_centers(self):
+        if not self.target_water:
+            return
+
+        waters = self.target_water if isinstance(self.target_water, list) else [self.target_water]
+        for water in waters:
+            if abs(self.x - water.x) + abs(self.y - water.y) >= 2:
+                continue
+
+            dx = self.x - water.x
+            dy = self.y - water.y
+            if dx == 0 and dy == 0:
+                dx = 1
+            self.x = max(0, min(GRID_WIDTH - 1, self.x + (1 if dx > 0 else -1)))
+            self.y = max(0, min(GRID_HEIGHT - 1, self.y + (1 if dy > 0 else -1)))
 
     def _print(self, *args, **kwargs):
         if self.display_output:

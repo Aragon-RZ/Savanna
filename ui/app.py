@@ -420,7 +420,7 @@ class SavannaApp(tk.Tk):
     def _start(self):
         if not self.engine:
             self._new_engine()
-        elif self.engine_started and not self.engine.is_alive():
+        elif self.engine.ident is not None and not self.engine.is_alive():
             self._new_engine()
 
         self.engine.tick_rate = self.speed_var.get()
@@ -493,7 +493,7 @@ class SavannaApp(tk.Tk):
         if not self.engine:
             self._new_engine()
             return
-        if self.engine_started and not self.engine.is_alive():
+        if self.engine.ident is not None and not self.engine.is_alive():
             self._new_engine()
 
     def _create_object(self, object_type, x, y):
@@ -503,13 +503,16 @@ class SavannaApp(tk.Tk):
         name = self._next_name(object_type)
         if object_type == "Ranger":
             territory = "south" if y >= GRID_HEIGHT // 2 else "north"
-            return Ranger(
+            ranger = Ranger(
                 name=name,
                 x=x,
                 y=y,
                 territory=territory,
                 display_output=False
             )
+            ranger.target_water = self.engine.water_sources()
+            ranger.engine_ref = self.engine
+            return ranger
 
         jeep = SafariJeep(
             name=name,
@@ -520,6 +523,7 @@ class SavannaApp(tk.Tk):
             zone_radius=14,
             display_output=False
         )
+        jeep.engine_ref = self.engine
         jeep.known_entities = self.engine.entities
         return jeep
 
@@ -556,6 +560,8 @@ class SavannaApp(tk.Tk):
         for entity in self.engine.entities:
             if hasattr(entity, "thirst"):
                 self._configure_animal_targets(entity)
+            elif isinstance(entity, Ranger):
+                entity.target_water = self.engine.water_sources()
 
     def _selected_position(self):
         if self.random_position_var.get():
@@ -638,7 +644,7 @@ class SavannaApp(tk.Tk):
         self.engine.stop()
         if self.engine.is_alive():
             self.engine.join(timeout=1.0)
-        self.engine_started = True
+        self.engine_started = False
 
     def _on_speed_change(self, value):
         speed = float(value)
@@ -941,7 +947,22 @@ class SavannaApp(tk.Tk):
         }
         fill, outline = palette.get(category, palette["other"])
         if not entity["is_alive"] or state == "DEAD":
-            fill, outline = "#9b9b9b", "#505050"
+            ticks_dead = entity.get("ticks_dead", 0)
+            max_decay = 30
+            if ticks_dead >= max_decay:
+                return
+
+            decay_ratio = ticks_dead / max_decay
+            size = max(1, int(6 * (1 - decay_ratio)))
+            grey_value = int(150 + 80 * decay_ratio)
+            grey = f"#{grey_value:02x}{grey_value:02x}{grey_value:02x}"
+            canvas.create_oval(
+                x - size, y - size, x + size, y + size,
+                fill=grey,
+                outline="#aaaaaa",
+                width=1
+            )
+            return
 
         size = 6
         if category in {"ranger", "vehicle"}:

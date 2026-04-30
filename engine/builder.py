@@ -234,6 +234,8 @@ class SafariBuilder:
                 territory=territory,
                 display_output=self.display_output
             )
+            ranger.target_water = self.water
+            ranger.engine_ref = self.engine
             if self.auto_start_workers:
                 ranger.start()
             self.engine.add_entity(ranger)
@@ -253,6 +255,7 @@ class SafariBuilder:
                             zone_x=zone_x, zone_y=zone_y, zone_radius=radius,
                             display_output=self.display_output,
                             seat_capacity=random.choice([6, 8, 10]))
+            jeep.engine_ref = self.engine
             jeep.known_entities = self.engine.entities
             if self.auto_start_workers:
                 jeep.start()
