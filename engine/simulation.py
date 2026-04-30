@@ -11,9 +11,16 @@
 #     (those now live in WateringHole.update())
 # ============================================================
 
+import random
 import time
 import threading
-from utils.constants import TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR, MAX_THIRST, MAX_HUNGER
+from utils.constants import (
+    TICK_RATE, TICKS_PER_DAY, SUNRISE_HOUR, SUNSET_HOUR, MAX_THIRST, MAX_HUNGER,
+    GRID_WIDTH, GRID_HEIGHT, REPRODUCTION_CHECK_INTERVAL, REPRODUCTION_CHANCE,
+    REPRODUCTION_RADIUS, REPRODUCTION_MIN_AGE_TICKS, REPRODUCTION_COOLDOWN_TICKS,
+    REPRODUCTION_MAX_ANIMALS, REPRODUCTION_MAX_BIRTHS_PER_TICK,
+    REPRODUCTION_MAX_THIRST, REPRODUCTION_MAX_HUNGER
+)
 from utils.colors import Colors
 from utils.events import Event, event_bus
 from engine.weather import WeatherSystem
@@ -37,6 +44,14 @@ class SimulationEngine(threading.Thread):
         self._pause_event = threading.Event()
         self._pause_event.set()
         self._stop_event = threading.Event()
+        self.births_total = 0
+        self.deaths_total = 0
+        self.births_this_tick = 0
+        self.deaths_this_tick = 0
+        self.births_by_species = {}
+        self.deaths_by_species = {}
+        self.deaths_by_cause = {}
+        self._known_dead_ids = set()
 
     def add_entity(self, entity):
         with self._lock:
@@ -152,6 +167,8 @@ class SimulationEngine(threading.Thread):
     def _tick_once(self):
         self.tick_count += 1
         current_hour = self.tick_count % TICKS_PER_DAY
+        self.births_this_tick = 0
+        self.deaths_this_tick = 0
 
         if current_hour == SUNRISE_HOUR:
             self._print("\n🌅 The sun is rising over the savanna...")
@@ -164,13 +181,13 @@ class SimulationEngine(threading.Thread):
         thirst_mod, hunger_mod = self.weather.get_modifiers()
         if thirst_mod != 0 or hunger_mod != 0:
             for entity in self.entities:
-                if entity.is_alive and hasattr(entity, 'thirst'):
+                if getattr(entity, "is_alive", False) and hasattr(entity, 'thirst'):
                     entity.thirst = max(0, entity.thirst + thirst_mod)
                     entity.hunger = max(0, entity.hunger + hunger_mod)
 
         # 1. Update all entities
-        for entity in self.entities:
-            if entity.is_alive:
+        for entity in list(self.entities):
+            if getattr(entity, "is_alive", False):
                 entity.update(current_hour, self.entities)
                 self._display_entity(entity)
             elif hasattr(entity, "ticks_dead"):
@@ -180,17 +197,13 @@ class SimulationEngine(threading.Thread):
         for env in self.environments:
             env.update(self.tick_count, self.entities)
 
+        self._record_new_deaths()
+        self._try_reproduction()
+
         # 3. Print environment status every 6 ticks
         if self.tick_count % 6 == 0:
             for env in self.environments:
                 self._print(f"\n{env.status()}\n")
-
-        # 4. Stop condition
-        if self.tick_count >= self.max_ticks:
-            self._print("\n🛑 Max ticks reached. Stopping simulation.")
-            self.is_running = False
-            self._stop_event.set()
-            return
 
         if self.logger:
             self.logger.log(
@@ -198,8 +211,16 @@ class SimulationEngine(threading.Thread):
                 hour=current_hour,
                 entities=self.entities,
                 weather_name=self.weather.current_weather.name,
-                environments=self.environments
+                environments=self.environments,
+                metrics=self._metrics_snapshot_unlocked()
             )
+
+        # 4. Stop condition
+        if self.tick_count >= self.max_ticks:
+            self._print("\n🛑 Max ticks reached. Stopping simulation.")
+            self.is_running = False
+            self._stop_event.set()
+            return
 
     def _display_entity(self, entity):
         if not self.display_output or entity.__class__.__name__ == "Ranger":
@@ -233,6 +254,158 @@ class SimulationEngine(threading.Thread):
 
         self._print(f"   [{Colors.state(entity.name)} {entity.id}] "
                     f"@({entity.x}, {entity.y}) | " + " | ".join(status_parts))
+
+    def _record_new_deaths(self):
+        for entity in self.entities:
+            if not hasattr(entity, "thirst") or getattr(entity, "is_alive", True):
+                continue
+
+            entity_key = id(entity)
+            if entity_key in self._known_dead_ids:
+                continue
+
+            self._known_dead_ids.add(entity_key)
+            cause = getattr(entity, "death_cause", None) or "Unknown"
+            species = entity.__class__.__name__
+            self.deaths_total += 1
+            self.deaths_this_tick += 1
+            self.deaths_by_species[species] = self.deaths_by_species.get(species, 0) + 1
+            self.deaths_by_cause[cause] = self.deaths_by_cause.get(cause, 0) + 1
+
+    def _try_reproduction(self):
+        if self.tick_count % REPRODUCTION_CHECK_INTERVAL != 0:
+            return
+
+        from entities.animals import Carnivore, Herbivore, Insectivore
+
+        living_animals = [
+            entity for entity in self.entities
+            if getattr(entity, "is_alive", False) and hasattr(entity, "thirst")
+        ]
+        available_slots = REPRODUCTION_MAX_ANIMALS - len(living_animals)
+        if available_slots <= 0:
+            return
+
+        candidates = []
+        for animal in living_animals:
+            if isinstance(animal, Carnivore):
+                continue
+            if not isinstance(animal, (Herbivore, Insectivore)):
+                continue
+            if not self._eligible_for_reproduction(animal):
+                continue
+            candidates.append(animal)
+
+        if len(candidates) < 2:
+            return
+
+        random.shuffle(candidates)
+        used = set()
+        births_remaining = min(REPRODUCTION_MAX_BIRTHS_PER_TICK, available_slots)
+
+        for animal in candidates:
+            if births_remaining <= 0:
+                break
+            if id(animal) in used:
+                continue
+
+            mate = self._find_reproduction_mate(animal, candidates, used)
+            if mate is None or random.random() > REPRODUCTION_CHANCE:
+                continue
+
+            offspring = self._create_offspring(animal, mate)
+            self.add_entity(offspring)
+            self._record_birth(offspring)
+
+            animal.last_reproduction_tick = self.tick_count
+            mate.last_reproduction_tick = self.tick_count
+            used.add(id(animal))
+            used.add(id(mate))
+            births_remaining -= 1
+
+            event_bus.emit(Event.ANIMAL_BORN, {
+                "entity": offspring,
+                "parent_a": animal,
+                "parent_b": mate
+            })
+
+    def _eligible_for_reproduction(self, animal):
+        state = getattr(animal, "state", "")
+        if state in {"DEAD", "DESPERATE", "DRINKING", "GRAZING", "FORAGING", "FLEEING", "HUNTING"}:
+            return False
+        if getattr(animal, "thirst", MAX_THIRST) > REPRODUCTION_MAX_THIRST:
+            return False
+        if getattr(animal, "hunger", MAX_HUNGER) > REPRODUCTION_MAX_HUNGER:
+            return False
+        if self.tick_count - getattr(animal, "birth_tick", 0) < REPRODUCTION_MIN_AGE_TICKS:
+            return False
+        if self.tick_count - getattr(animal, "last_reproduction_tick", -999999) < REPRODUCTION_COOLDOWN_TICKS:
+            return False
+        return True
+
+    def _find_reproduction_mate(self, animal, candidates, used):
+        nearby = [
+            mate for mate in candidates
+            if mate is not animal
+            and id(mate) not in used
+            and mate.__class__ is animal.__class__
+            and self._distance(animal, mate) <= REPRODUCTION_RADIUS
+        ]
+        if not nearby:
+            return None
+        return min(nearby, key=lambda mate: self._distance(animal, mate))
+
+    def _create_offspring(self, parent_a, parent_b):
+        animal_class = parent_a.__class__
+        entity_id = self.next_entity_id()
+        x = self._clamp_grid(
+            round((parent_a.x + parent_b.x) / 2) + random.randint(-2, 2),
+            GRID_WIDTH
+        )
+        y = self._clamp_grid(
+            round((parent_a.y + parent_b.y) / 2) + random.randint(-2, 2),
+            GRID_HEIGHT
+        )
+        offspring = animal_class(entity_id, f"{animal_class.__name__} Young {entity_id}", x, y)
+        offspring.display_output = self.display_output
+        offspring.thirst = random.randint(5, 30)
+        offspring.hunger = random.randint(5, 30)
+        offspring.birth_tick = self.tick_count
+        offspring.last_reproduction_tick = self.tick_count
+        self._configure_offspring_targets(offspring)
+        return offspring
+
+    def _configure_offspring_targets(self, offspring):
+        from entities.animals import Herbivore, Insectivore
+
+        offspring.target_water = self._water_hole_objects()
+        if isinstance(offspring, Insectivore):
+            offspring.target_insects = self._insect_feeding_objects()
+        elif isinstance(offspring, Herbivore):
+            offspring.target_food = self._grazing_area_objects()
+
+    def _record_birth(self, offspring):
+        species = offspring.__class__.__name__
+        self.births_total += 1
+        self.births_this_tick += 1
+        self.births_by_species[species] = self.births_by_species.get(species, 0) + 1
+
+    def _distance(self, entity_a, entity_b):
+        return abs(entity_a.x - entity_b.x) + abs(entity_a.y - entity_b.y)
+
+    def _clamp_grid(self, value, limit):
+        return max(0, min(limit - 1, int(value)))
+
+    def _metrics_snapshot_unlocked(self):
+        return {
+            "births_total": self.births_total,
+            "deaths_total": self.deaths_total,
+            "births_this_tick": self.births_this_tick,
+            "deaths_this_tick": self.deaths_this_tick,
+            "births_by_species": dict(sorted(self.births_by_species.items())),
+            "deaths_by_species": dict(sorted(self.deaths_by_species.items())),
+            "deaths_by_cause": dict(sorted(self.deaths_by_cause.items())),
+        }
 
     def snapshot(self):
         with self._lock:
@@ -273,6 +446,13 @@ class SimulationEngine(threading.Thread):
                     "avg_thirst": round(sum(thirst_values) / len(thirst_values), 1) if thirst_values else 0,
                     "avg_hunger": round(sum(hunger_values) / len(hunger_values), 1) if hunger_values else 0,
                     "active_species": self._active_species(entity_snapshots),
+                    "births_total": self.births_total,
+                    "deaths_total": self.deaths_total,
+                    "births_this_tick": self.births_this_tick,
+                    "deaths_this_tick": self.deaths_this_tick,
+                    "births_by_species": dict(sorted(self.births_by_species.items())),
+                    "deaths_by_species": dict(sorted(self.deaths_by_species.items())),
+                    "deaths_by_cause": dict(sorted(self.deaths_by_cause.items())),
                 }
             }
 
@@ -302,6 +482,8 @@ class SimulationEngine(threading.Thread):
             "fuel_capacity": getattr(entity, "fuel_capacity", None),
             "territory": getattr(entity, "territory", None),
             "ticks_dead": getattr(entity, "ticks_dead", 0),
+            "birth_tick": getattr(entity, "birth_tick", None),
+            "death_cause": getattr(entity, "death_cause", None),
         }
 
     def _active_species(self, entity_snapshots):

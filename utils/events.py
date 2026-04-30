@@ -25,6 +25,7 @@ from abc import ABC, abstractmethod
 # ── EVENT TYPE CONSTANTS ─────────────────────────────────────
 class Event:
     ANIMAL_DIED      = "animal_died"       # payload: { "entity": animal, "cause": str }
+    ANIMAL_BORN      = "animal_born"       # payload: { "entity": animal, "parent_a": animal, "parent_b": animal }
     WATER_SPOT_FREED = "water_spot_freed"  # payload: { "environment": hole, "freed_by": animal }
     GRAZING_SPOT_FREED = "grazing_spot_freed"  # payload: { "environment": area, "freed_by": animal }
     ANIMAL_HUNTING   = "animal_hunting"    # payload: { "predator": animal, "prey": animal }

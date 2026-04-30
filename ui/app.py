@@ -37,6 +37,7 @@ from utils.events import Event, EventListener, event_bus
 
 EVENT_TYPES = [
     Event.ANIMAL_DIED,
+    Event.ANIMAL_BORN,
     Event.WATER_SPOT_FREED,
     Event.GRAZING_SPOT_FREED,
     Event.ANIMAL_HUNTING,
@@ -85,6 +86,16 @@ class UiEventCollector(EventListener):
             entity = payload.get("entity")
             cause = payload.get("cause", "unknown")
             return f"Death: {getattr(entity, 'name', 'Unknown')} ({cause})"
+
+        if event_type == Event.ANIMAL_BORN:
+            entity = payload.get("entity")
+            parent_a = payload.get("parent_a")
+            parent_b = payload.get("parent_b")
+            return (
+                f"Birth: {getattr(entity, 'name', 'New animal')} "
+                f"from {getattr(parent_a, 'name', 'parent')} and "
+                f"{getattr(parent_b, 'name', 'parent')}"
+            )
 
         if event_type == Event.ANIMAL_HUNTING:
             predator = payload.get("predator")
@@ -245,6 +256,8 @@ class SavannaApp(tk.Tk):
             "Weather",
             "Entities",
             "Alive",
+            "Births",
+            "Deaths",
             "Herbivores",
             "Carnivores",
             "Insectivores",
@@ -712,6 +725,8 @@ class SavannaApp(tk.Tk):
             "Weather": snapshot["weather"],
             "Entities": str(summary["total_entities"]),
             "Alive": str(summary["alive_total"]),
+            "Births": str(summary.get("births_total", 0)),
+            "Deaths": str(summary.get("deaths_total", 0)),
             "Herbivores": str(summary["alive_herbivores"]),
             "Carnivores": str(summary["alive_carnivores"]),
             "Insectivores": str(summary["alive_insectivores"]),

@@ -26,11 +26,17 @@ class Animal(Entity):
         self.is_diurnal = is_diurnal
         self.behavior = WanderStrategy()
         self.display_output = True
+        self.birth_tick = 0
+        self.last_reproduction_tick = -999999
+        self.death_cause = None
 
     def die(self, cause):
+        if not self.is_alive:
+            return
         self.is_alive = False
         self.state = "DEAD"
         self.ticks_dead = 0
+        self.death_cause = cause
         self._print(f"💀 {self.name} died! Cause: {cause}.")
         event_bus.emit(Event.ANIMAL_DIED, {"entity": self, "cause": cause})
 
