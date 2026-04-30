@@ -30,6 +30,7 @@ from entities.animals import (
     Zebra,
 )
 from entities.humans import Ranger
+from entities.poachers import Poacher
 from entities.vehicles import SafariJeep
 from utils.constants import GRID_HEIGHT, GRID_WIDTH
 from utils.events import Event, EventListener, event_bus
@@ -77,7 +78,7 @@ LAND_OBJECT_TYPES = [
     "SafariStation",
 ]
 
-OBJECT_TYPES = list(ANIMAL_TYPES) + ["Ranger", "SafariJeep"] + LAND_OBJECT_TYPES
+OBJECT_TYPES = list(ANIMAL_TYPES) + ["Ranger", "SafariJeep", "Poacher"] + LAND_OBJECT_TYPES
 
 
 class UiEventCollector(EventListener):
@@ -587,7 +588,7 @@ class SavannaApp(tk.Tk):
 
         builder = SafariBuilder(
             max_ticks=self.max_ticks_var.get(),
-            logger_enabled=False,
+            logger_enabled=True,
             display_output=False,
             tick_rate=self.speed_var.get(),
             auto_start_workers=False
@@ -603,6 +604,8 @@ class SavannaApp(tk.Tk):
         self.engine_started = False
         self._attach_event_collector()
         self._append_event("UI", "World ready")
+        if getattr(self.engine, "logger", None):
+            self._append_event("UI", f"Logging CSV: {self.engine.logger.filepath}")
         self._render_snapshot(self.engine.snapshot())
         self._update_buttons()
 
@@ -672,6 +675,8 @@ class SavannaApp(tk.Tk):
 
         entity = self._create_object(object_type, x, y)
         self.engine.add_entity(entity)
+        if object_type == "Poacher":
+            self._alert_poacher_spawn(entity)
         return entity
 
     def _populate_more(self):
@@ -715,6 +720,20 @@ class SavannaApp(tk.Tk):
             ranger.engine_ref = self.engine
             return ranger
 
+        if object_type == "Poacher":
+            target = self._nearest_poacher_target(x, y)
+            zone_id = self.engine._zone_id_for(x, y) if hasattr(self.engine, "_zone_id_for") else None
+            poacher = Poacher(
+                self.engine.next_entity_id(),
+                name,
+                x,
+                y,
+                target=target,
+                zone_id=zone_id,
+                display_output=False
+            )
+            return poacher
+
         jeep = SafariJeep(
             name=name,
             x=x,
@@ -727,6 +746,28 @@ class SavannaApp(tk.Tk):
         jeep.engine_ref = self.engine
         jeep.known_entities = self.engine.entities
         return jeep
+
+    def _nearest_poacher_target(self, x, y):
+        candidates = [
+            entity for entity in self.engine.entities
+            if getattr(entity, "is_alive", False)
+            and hasattr(entity, "thirst")
+            and entity.__class__.__name__ not in {"Lion", "Cheetah", "Leopard"}
+        ]
+        if not candidates:
+            return None
+        return min(candidates, key=lambda entity: abs(entity.x - x) + abs(entity.y - y))
+
+    def _alert_poacher_spawn(self, poacher):
+        assigned_ranger = None
+        if hasattr(self.engine, "_nearest_ranger"):
+            assigned_ranger = self.engine._nearest_ranger(poacher.x, poacher.y)
+        event_bus.emit(Event.POACHER_SPOTTED, {
+            "poacher": poacher,
+            "zone_id": getattr(poacher, "zone_id", None),
+            "target": getattr(poacher, "target", None),
+            "assigned_ranger": assigned_ranger
+        })
 
     def _create_land_object(self, object_type, x, y):
         name = self._next_environment_name(object_type)

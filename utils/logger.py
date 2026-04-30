@@ -26,7 +26,7 @@ class SimulationLogger:
 
     def __init__(self, filename: str = None):
         if filename is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             filename = f"simulation_{timestamp}.csv"
 
         self.filepath = os.path.join(os.path.dirname(__file__), '..', filename)
@@ -67,6 +67,10 @@ class SimulationLogger:
             "insect_utilization_pct",
             "rangers",
             "jeeps",
+            "active_long_trips",
+            "jeep_seats_taken",
+            "jeep_seat_capacity",
+            "jeep_occupancy_pct",
             "avg_jeep_fuel",
             "min_jeep_fuel",
             "total_sightings",
@@ -138,6 +142,16 @@ class SimulationLogger:
             for jeep in jeeps
             if getattr(jeep, "fuel_level", None) is not None
         ]
+        jeep_seats_taken = sum(getattr(jeep, "seats_taken", 0) for jeep in jeeps)
+        jeep_seat_capacity = sum(getattr(jeep, "seat_capacity", 0) for jeep in jeeps)
+        jeep_occupancy = (
+            round((jeep_seats_taken / jeep_seat_capacity) * 100, 1)
+            if jeep_seat_capacity else 0
+        )
+        active_long_trips = sum(
+            1 for jeep in jeeps
+            if getattr(jeep, "active_long_trip", None)
+        )
         death_causes = metrics.get("deaths_by_cause", {})
 
         with open(self.filepath, 'a', newline='') as f:
@@ -168,6 +182,10 @@ class SimulationLogger:
                 insect_feeders, insect_capacity, insect_util,
                 len(rangers),
                 len(jeeps),
+                metrics.get("active_long_trips", active_long_trips),
+                jeep_seats_taken,
+                jeep_seat_capacity,
+                jeep_occupancy,
                 self._average(fuel_values),
                 min(fuel_values) if fuel_values else 0,
                 sum(getattr(jeep, "sightings", 0) for jeep in jeeps),

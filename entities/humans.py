@@ -19,7 +19,14 @@ import threading
 import time
 import random
 from utils.events import event_bus, Event, EventListener
-from utils.constants import GRID_WIDTH, GRID_HEIGHT
+from utils.constants import (
+    GRID_WIDTH,
+    GRID_HEIGHT,
+    RANGER_CAMP_STEP,
+    RANGER_PATROL_SPEED,
+    RANGER_PURSUIT_STEP,
+    RANGER_RESPONSE_STEP,
+)
 
 
 
@@ -49,7 +56,7 @@ class CampPatrolStrategy:
         ranger.state = f"CAMPING {self.camp.zone_id}"
         distance = abs(ranger.x - self.camp.x) + abs(ranger.y - self.camp.y)
         if distance > self.radius:
-            ranger.move_towards(self.camp.x, self.camp.y)
+            ranger.move_towards(self.camp.x, self.camp.y, RANGER_CAMP_STEP)
         else:
             ranger.x = max(0, min(GRID_WIDTH - 1, ranger.x + random.choice([-1, 0, 1])))
             ranger.y = max(0, min(GRID_HEIGHT - 1, ranger.y + random.choice([-1, 0, 1])))
@@ -67,16 +74,7 @@ class RespondStrategy:
 
     def execute(self, ranger):
         ranger.state = f"RESPONDING to {self.animal_name}"
-
-        # Move toward the target
-        if ranger.x < self.target_x: ranger.x += 1
-        elif ranger.x > self.target_x: ranger.x -= 1
-        if ranger.y < self.target_y: ranger.y += 1
-        elif ranger.y > self.target_y: ranger.y -= 1
-
-        # Clamp to grid
-        ranger.x = max(0, min(GRID_WIDTH  - 1, ranger.x))
-        ranger.y = max(0, min(GRID_HEIGHT - 1, ranger.y))
+        ranger.move_towards(self.target_x, self.target_y, RANGER_RESPONSE_STEP)
 
         # Arrived at scene
         if ranger.x == self.target_x and ranger.y == self.target_y:
@@ -97,7 +95,7 @@ class PursuePoacherStrategy:
             return
 
         ranger.state = f"PURSUING {self.poacher.name}"
-        ranger.move_towards(self.poacher.x, self.poacher.y)
+        ranger.move_towards(self.poacher.x, self.poacher.y, RANGER_PURSUIT_STEP)
 
         if abs(ranger.x - self.poacher.x) + abs(ranger.y - self.poacher.y) <= 1:
             if hasattr(self.poacher, "arrest"):
@@ -117,7 +115,7 @@ class Ranger(threading.Thread, EventListener):
     STRATEGY  : holds a behavior that swaps at runtime
     """
 
-    PATROL_SPEED = 1.5  # seconds between ranger moves
+    PATROL_SPEED = RANGER_PATROL_SPEED  # seconds between ranger moves
 
     def __init__(self, name: str, x: int, y: int, territory: str = None,
                  display_output: bool = True):
@@ -248,17 +246,18 @@ class Ranger(threading.Thread, EventListener):
             self.behavior = RangerStrategy()
 
     def move_towards(self, target_x, target_y, step=1):
-        if self.x < target_x:
-            self.x += step
-        elif self.x > target_x:
-            self.x -= step
-        if self.y < target_y:
-            self.y += step
-        elif self.y > target_y:
-            self.y -= step
+        self.x += self._step_towards(self.x, target_x, step)
+        self.y += self._step_towards(self.y, target_y, step)
         self.x = max(0, min(GRID_WIDTH - 1, self.x))
         self.y = max(0, min(GRID_HEIGHT - 1, self.y))
         self.avoid_water_centers()
+
+    def _step_towards(self, current, target, step):
+        if current < target:
+            return min(step, target - current)
+        if current > target:
+            return -min(step, current - target)
+        return 0
 
     def avoid_water_centers(self):
         if not self.target_water:
