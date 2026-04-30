@@ -27,6 +27,7 @@ class Animal(Entity):
     def die(self, cause):
         self.is_alive = False
         self.state = "DEAD"
+        self.ticks_dead = 0
         self._print(f"💀 {self.name} died! Cause: {cause}.")
         event_bus.emit(Event.ANIMAL_DIED, {"entity": self, "cause": cause})
 
@@ -81,19 +82,44 @@ class Animal(Entity):
     def act(self, entities):
         self.behavior.execute(self, entities)
 
+    def _avoid_water_centers(self):
+        """Push entity away from watering hole centers unless seeking/drinking."""
+        if self.state in ["SEEKING_WATER", "DRINKING", "WAITING_IN_LINE", "DESPERATE"]:
+            return  # allowed to approach water
+        
+        if not self.target_water:
+            return
+        
+        # target_water can be a list or single object
+        holes = self.target_water if isinstance(self.target_water, list) else [self.target_water]
+        
+        EXCLUSION_RADIUS = 2  # grid units around center
+        
+        for hole in holes:
+            dist = abs(self.x - hole.x) + abs(self.y - hole.y)
+            if dist < EXCLUSION_RADIUS:
+                # Push away from center
+                dx = self.x - hole.x
+                dy = self.y - hole.y
+                if dx == 0 and dy == 0:
+                    dx = 1  # push right if exactly on top
+                # Move one step away
+                self.x = max(0, min(GRID_WIDTH - 1, self.x + (1 if dx > 0 else -1)))
+                self.y = max(0, min(GRID_HEIGHT - 1, self.y + (1 if dy > 0 else -1)))
+
     def move_randomly(self):
-        # ✅ FIXED — clamped to grid boundaries
-        self.x = max(0, min(GRID_WIDTH - 1,  self.x + random.choice([-1, 0, 1])))
+        self.x = max(0, min(GRID_WIDTH - 1, self.x + random.choice([-1, 0, 1])))
         self.y = max(0, min(GRID_HEIGHT - 1, self.y + random.choice([-1, 0, 1])))
+        self._avoid_water_centers()  # 👈 add this
 
     def move_towards(self, target_x, target_y):
-        # ✅ FIXED — clamped to grid boundaries
         if self.x < target_x: self.x += 1
         elif self.x > target_x: self.x -= 1
         if self.y < target_y: self.y += 1
         elif self.y > target_y: self.y -= 1
         self.x = max(0, min(GRID_WIDTH - 1, self.x))
         self.y = max(0, min(GRID_HEIGHT - 1, self.y))
+        self._avoid_water_centers()  # 👈 add this
 
 
 class Herbivore(Animal):

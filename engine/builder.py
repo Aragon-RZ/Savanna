@@ -195,6 +195,7 @@ class SafariBuilder:
                 territory=territory,
                 display_output=self.display_output
             )
+            ranger.target_water = self.water 
             ranger.engine_ref = self.engine
             if self.auto_start_workers:
                 ranger.start()

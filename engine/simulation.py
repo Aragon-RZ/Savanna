@@ -153,6 +153,9 @@ class SimulationEngine(threading.Thread):
             if entity.is_alive:
                 entity.update(current_hour, self.entities)
                 self._display_entity(entity)
+        for entity in self.entities:
+            if not entity.is_alive and hasattr(entity, 'ticks_dead'):
+                entity.ticks_dead += 1
 
         # 2. Update environments — Composite handles the rest internally
         for env in self.environments:
@@ -272,6 +275,7 @@ class SimulationEngine(threading.Thread):
             "hunger": getattr(entity, "hunger", None),
             "sightings": getattr(entity, "sightings", None),
             "territory": getattr(entity, "territory", None),
+            "ticks_dead": getattr(entity, "ticks_dead", 0),
         }
 
     def _entity_category(self, entity):

@@ -6,6 +6,7 @@ class Entity:
         self.y = y
         self.is_alive = True
         self.state = "IDLE"    # Current state (e.g., IDLE, WANDERING, DRINKING, etc.)
+        self.ticks_dead = 0
 
     def update(self, current_hour=0, entities=None):
         pass #meant to be overridden by child classes (like Animal). Each specific entity defines its own behavior here.

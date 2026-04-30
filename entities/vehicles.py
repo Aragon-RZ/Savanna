@@ -38,27 +38,46 @@ class PatrolRouteStrategy:
         self.zone_x = zone_x   # center of patrol zone
         self.zone_y = zone_y
         self.radius = radius   # how far from center to wander
+        self.spotted_this_tour = set()
 
     def execute(self, jeep):
         jeep.state = "ON TOUR"
-        # Wander within assigned zone
-        jeep.x = max(self.zone_x - self.radius,
-                     min(self.zone_x + self.radius,
-                         jeep.x + random.choice([-3, -2, -1, 0, 1, 2, 3])))
-        jeep.y = max(self.zone_y - self.radius,
-                     min(self.zone_y + self.radius,
-                         jeep.y + random.choice([-3, -2, -1, 0, 1, 2, 3])))
+        
+        # Find nearest living animal and bias movement toward it
+        living = [e for e in jeep.known_entities
+                if hasattr(e, 'is_alive') and e.is_alive
+                and e.__class__.__name__ not in ("Ranger", "SafariJeep")]
+        
+        if living:
+            # Pick closest living animal
+            nearest = min(living, key=lambda e: abs(e.x - jeep.x) + abs(e.y - jeep.y))
+            # 70% chance move toward it, 30% random wander
+            if random.random() < 0.7:
+                if jeep.x < nearest.x: jeep.x += 2
+                elif jeep.x > nearest.x: jeep.x -= 2
+                if jeep.y < nearest.y: jeep.y += 2
+                elif jeep.y > nearest.y: jeep.y -= 2
+            else:
+                jeep.x += random.choice([-2, -1, 0, 1, 2])
+                jeep.y += random.choice([-2, -1, 0, 1, 2])
+        else:
+            jeep.x += random.choice([-2, -1, 0, 1, 2])
+            jeep.y += random.choice([-2, -1, 0, 1, 2])
+
+        # Clamp to grid
         jeep.x = max(0, min(GRID_WIDTH - 1, jeep.x))
         jeep.y = max(0, min(GRID_HEIGHT - 1, jeep.y))
 
-        # Passive sighting within zone
+        # Passive sighting
         nearby = [e for e in jeep.known_entities
-                  if hasattr(e,'is_alive') and e.is_alive
-                  and hasattr(e,'state') 
-                  and e.__class__.__name__ not in ("Ranger","SafariJeep")
-                  and abs(e.x - jeep.x) + abs(e.y - jeep.y) <= 8]
+                if hasattr(e,'is_alive') and e.is_alive
+                and hasattr(e,'state')
+                and e.__class__.__name__ not in ("Ranger","SafariJeep")
+                and abs(e.x - jeep.x) + abs(e.y - jeep.y) <= 8
+                and e.id not in self.spotted_this_tour]
         if nearby:
             spotted = nearby[0]
+            self.spotted_this_tour.add(spotted.id)
             jeep._print(f"   📷 [{jeep.name}] Tourists spotted: "
                         f"{spotted.name} ({spotted.state}) nearby!")
             jeep.sightings += 1

@@ -26,11 +26,25 @@ from utils.constants import GRID_WIDTH, GRID_HEIGHT
 # ── STRATEGY PATTERN — Ranger Behaviors ─────────────────────
 
 class RangerStrategy:
-    """Base strategy — ranger patrols calmly."""
     def execute(self, ranger):
         ranger.state = "PATROLLING"
-        ranger.x = max(0, min(GRID_WIDTH  - 1, ranger.x + random.choice([-1, 0, 1])))
+        ranger.x = max(0, min(GRID_WIDTH - 1, ranger.x + random.choice([-1, 0, 1])))
         ranger.y = max(0, min(GRID_HEIGHT - 1, ranger.y + random.choice([-1, 0, 1])))
+        
+        # 👈 ADD THIS — rangers avoid walking through water centers
+        if hasattr(ranger, 'target_water') and ranger.target_water:
+            holes = ranger.target_water if isinstance(ranger.target_water, list) else [ranger.target_water]
+            for hole in holes:
+                dist = abs(ranger.x - hole.x) + abs(ranger.y - hole.y)
+                if dist < 2:
+                    dx = ranger.x - hole.x
+                    dy = ranger.y - hole.y
+                    if dx == 0 and dy == 0:
+                        dx = 1
+                    ranger.x = max(0, min(GRID_WIDTH - 1, ranger.x + (1 if dx > 0 else -1)))
+                    ranger.y = max(0, min(GRID_HEIGHT - 1, ranger.y + (1 if dy > 0 else -1)))
+
+    
 
 class RespondStrategy:
     """

@@ -693,7 +693,19 @@ class SavannaApp(tk.Tk):
         }
         fill, outline = palette.get(category, palette["other"])
         if not entity["is_alive"] or state == "DEAD":
-            fill, outline = "#9b9b9b", "#505050"
+            ticks_dead = entity.get("ticks_dead", 0)
+            max_decay = 30
+            if ticks_dead >= max_decay:
+                return  # fully decayed, don't draw
+            decay_ratio = ticks_dead / max_decay
+            size = max(1, int(6 * (1 - decay_ratio)))
+            grey_value = int(150 + 80 * decay_ratio)
+            grey = f"#{grey_value:02x}{grey_value:02x}{grey_value:02x}"
+            canvas.create_oval(
+                x - size, y - size, x + size, y + size,
+                fill=grey, outline="#aaaaaa", width=1
+            )
+            return
 
         size = 6
         if category in {"ranger", "vehicle"}:
