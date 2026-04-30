@@ -583,6 +583,7 @@ class SavannaApp(tk.Tk):
         )
 
     def _new_engine(self):
+        # Rebuild the whole world on reset so threads, event listeners, and CSV logging are fresh.
         self._detach_event_collector()
         self.event_queue = queue.Queue()
 
@@ -670,12 +671,14 @@ class SavannaApp(tk.Tk):
         if object_type in LAND_OBJECT_TYPES:
             environment = self._create_land_object(object_type, x, y)
             self.engine.add_environment_component(environment)
+            # Newly placed resources must be visible to animals already in the world.
             self._refresh_animal_targets()
             return environment
 
         entity = self._create_object(object_type, x, y)
         self.engine.add_entity(entity)
         if object_type == "Poacher":
+            # Manual poacher placement should behave like a real incident.
             self._alert_poacher_spawn(entity)
         return entity
 
@@ -762,6 +765,7 @@ class SavannaApp(tk.Tk):
         assigned_ranger = None
         if hasattr(self.engine, "_nearest_ranger"):
             assigned_ranger = self.engine._nearest_ranger(poacher.x, poacher.y)
+        # The event bus handles ranger assignment and event-log formatting.
         event_bus.emit(Event.POACHER_SPOTTED, {
             "poacher": poacher,
             "zone_id": getattr(poacher, "zone_id", None),
@@ -895,6 +899,7 @@ class SavannaApp(tk.Tk):
             self.engine.tick_rate = speed
 
     def _refresh(self):
+        # Tkinter owns the UI thread; refresh pulls a safe engine snapshot on a timer.
         self._drain_events()
         if self.engine:
             self._render_snapshot(self.engine.snapshot())
@@ -916,6 +921,7 @@ class SavannaApp(tk.Tk):
         self.events_list.see(tk.END)
 
     def _render_snapshot(self, snapshot):
+        # One snapshot fans out to every UI surface so the tabs stay in sync.
         self.last_snapshot = snapshot
         self._render_summary(snapshot)
         self._render_species(snapshot["summary"].get("active_species", {}))
@@ -947,6 +953,7 @@ class SavannaApp(tk.Tk):
         scheduled_trips = sum(len(v.get("scheduled_long_trips") or []) for v in vehicles)
         completed_trips = sum(v.get("completed_long_trips", 0) for v in vehicles)
 
+        # Keys match the StringVars created in the Overview tab.
         values = {
             "Run": status,
             "Tick": f"{snapshot['tick']} / {snapshot['max_ticks']}",
@@ -994,6 +1001,7 @@ class SavannaApp(tk.Tk):
     def _render_breakdown(self, snapshot):
         self.breakdown_table.delete(*self.breakdown_table.get_children())
         summary = snapshot["summary"]
+        # Compact dictionaries are easier to scan here than separate nested tables.
         rows = [
             ("Births by species", self._format_counts(summary.get("births_by_species", {}))),
             ("Deaths by species", self._format_counts(summary.get("deaths_by_species", {}))),
@@ -1024,6 +1032,7 @@ class SavannaApp(tk.Tk):
         self.resource_table.delete(*self.resource_table.get_children())
         self.land_table.delete(*self.land_table.get_children())
 
+        # Resource rows show both capacity and current occupants for debugging crowding.
         for hole in snapshot.get("water_holes", []):
             kind = "River" if hole.get("kind") == "River" else "Water"
             self.resource_table.insert("", tk.END, values=(
@@ -1136,6 +1145,7 @@ class SavannaApp(tk.Tk):
         mid_y = self._sy(GRID_HEIGHT / 2, pad, map_height)
         canvas.create_line(pad, mid_y, width - pad, mid_y, fill="#778a62", dash=(5, 4))
 
+        # Draw static map resources first so moving entities remain on top.
         for hole in snapshot["water_holes"]:
             if hole.get("kind") == "River":
                 self._draw_river(canvas, hole, pad, map_width, map_height)
@@ -1157,6 +1167,7 @@ class SavannaApp(tk.Tk):
         for entity in snapshot["entities"]:
             self._draw_entity(canvas, entity, pad, map_width, map_height)
 
+        # Keep the weather visible above every other canvas item.
         self._draw_weather_badge(canvas, snapshot, pad)
 
     def _map_geometry(self):
@@ -1184,6 +1195,7 @@ class SavannaApp(tk.Tk):
         )
         bbox = canvas.bbox(text_id)
         if bbox:
+            # Tkinter has no text padding, so draw a small backing rectangle manually.
             background = canvas.create_rectangle(
                 bbox[0] - 7, bbox[1] - 4,
                 bbox[2] + 7, bbox[3] + 4,
@@ -1353,6 +1365,7 @@ class SavannaApp(tk.Tk):
         if category == "vehicle" and entity.get("active_trip_name"):
             fill, outline = "#f08a3a", "#7a3d13"
         if not entity["is_alive"] or state == "DEAD":
+            # Dead animals fade out over time instead of disappearing instantly.
             ticks_dead = entity.get("ticks_dead", 0)
             max_decay = 30
             if ticks_dead >= max_decay:
@@ -1417,6 +1430,7 @@ class SavannaApp(tk.Tk):
         canvas.create_text(x, y, text=label, fill="#ffffff", font=("Helvetica", 8, "bold"))
 
         if category == "vehicle" and entity.get("seat_capacity") is not None:
+            # Riders are drawn on-map so jeep occupancy is visible without opening a tab.
             riders = f"{entity.get('seats_taken', 0)}/{entity.get('seat_capacity', 0)}"
             text_id = canvas.create_text(
                 x,

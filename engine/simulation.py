@@ -181,6 +181,8 @@ class SimulationEngine(threading.Thread):
     def _tick_once(self):
         self.tick_count += 1
         current_hour = self.tick_count % TICKS_PER_DAY
+
+        # These counters describe only the current tick; totals are kept separately.
         self.births_this_tick = 0
         self.deaths_this_tick = 0
         self.poachers_arrested_this_tick = 0
@@ -194,7 +196,7 @@ class SimulationEngine(threading.Thread):
 
         self._print(f"--- ⏰ Tick {self.tick_count} | Hour: {current_hour}:00 ---")
 
-        # WEATHER — apply modifiers to all living entities this tick
+        # Weather is owned by a daemon thread; the engine reads its current effect here.
         thirst_mod, hunger_mod = self.weather.get_modifiers()
         if thirst_mod != 0 or hunger_mod != 0:
             for entity in self.entities:
@@ -202,10 +204,11 @@ class SimulationEngine(threading.Thread):
                     entity.thirst = max(0, entity.thirst + thirst_mod)
                     entity.hunger = max(0, entity.hunger + hunger_mod)
 
+        # Camps and poachers are processed before animals so the tick can react to them.
         self._expire_temporary_camps()
         self._maybe_spawn_poacher()
 
-        # 1. Update all entities
+        # Entity updates may change state, positions, births/deaths, and event emissions.
         for entity in list(self.entities):
             if getattr(entity, "is_alive", False):
                 entity.update(current_hour, self.entities)
@@ -213,7 +216,7 @@ class SimulationEngine(threading.Thread):
             elif hasattr(entity, "ticks_dead"):
                 entity.ticks_dead += 1
 
-        # 2. Update environments — Composite handles the rest internally
+        # Environment roots update their Composite leaves: water, grazing, camps, etc.
         for env in self.environments:
             env.update(self.tick_count, self.entities)
 
@@ -221,7 +224,6 @@ class SimulationEngine(threading.Thread):
         self._record_terminal_poachers()
         self._try_reproduction()
 
-        # 3. Print environment status every 6 ticks
         if self.tick_count % 6 == 0:
             for env in self.environments:
                 self._print(f"\n{env.status()}\n")
@@ -236,7 +238,6 @@ class SimulationEngine(threading.Thread):
                 metrics=self._metrics_snapshot_unlocked()
             )
 
-        # 4. Stop condition
         if self.tick_count >= self.max_ticks:
             self._print("\n🛑 Max ticks reached. Stopping simulation.")
             self.is_running = False
@@ -318,6 +319,7 @@ class SimulationEngine(threading.Thread):
                 self.poachers_escaped_this_tick += 1
 
     def _maybe_spawn_poacher(self):
+        # Poacher checks are rate-limited so incidents feel occasional, not constant.
         if self.tick_count % POACHER_EVENT_CHECK_INTERVAL != 0:
             return
         if len(self._active_poachers()) >= POACHER_MAX_ACTIVE:
@@ -331,6 +333,7 @@ class SimulationEngine(threading.Thread):
 
         from entities.poachers import Poacher
 
+        # Spawn on the closest map edge to create a clear in/out route.
         zone_id = self._zone_id_for(target.x, target.y)
         spawn_x, spawn_y = self._poacher_spawn_point(target)
         exit_point = (spawn_x, spawn_y)
@@ -351,6 +354,7 @@ class SimulationEngine(threading.Thread):
             self.poacher_incidents_by_zone.get(zone_id, 0) + 1
         )
 
+        # Rangers listen for this event and switch into pursuit behavior.
         assigned_ranger = self._nearest_ranger(target.x, target.y)
         event_bus.emit(Event.POACHER_SPOTTED, {
             "poacher": poacher,
@@ -359,6 +363,7 @@ class SimulationEngine(threading.Thread):
             "assigned_ranger": assigned_ranger
         })
 
+        # Repeated trouble in the same zone causes the reserve to reinforce it.
         if self.poacher_incidents_by_zone[zone_id] > POACHER_CAMP_THRESHOLD:
             self._ensure_temporary_camp(zone_id, assigned_ranger)
 
@@ -621,6 +626,7 @@ class SimulationEngine(threading.Thread):
         return max(0, min(limit - 1, int(value)))
 
     def _metrics_snapshot_unlocked(self):
+        # Logger-facing metrics; caller already holds the engine lock.
         vehicles = [
             entity for entity in self.entities
             if entity.__class__.__name__ == "SafariJeep"
@@ -653,6 +659,7 @@ class SimulationEngine(threading.Thread):
 
     def snapshot(self):
         with self._lock:
+            # The UI reads only snapshots so it never touches live threaded objects directly.
             entity_snapshots = [self._entity_snapshot(e) for e in self.entities]
             water_holes = self._water_hole_snapshots()
             alive_animals = [
@@ -712,6 +719,7 @@ class SimulationEngine(threading.Thread):
             }
 
     def _entity_snapshot(self, entity):
+        # Threaded entities own locks; snapshot while holding them to avoid half-written state.
         lock = getattr(entity, "_lock", None)
         if lock:
             with lock:
@@ -719,6 +727,7 @@ class SimulationEngine(threading.Thread):
         return self._entity_snapshot_unlocked(entity)
 
     def _entity_snapshot_unlocked(self, entity):
+        # Use optional fields so one table can represent animals, staff, vehicles, and poachers.
         return {
             "id": getattr(entity, "id", ""),
             "name": getattr(entity, "name", entity.__class__.__name__),

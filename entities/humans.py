@@ -49,6 +49,7 @@ class CampPatrolStrategy:
 
     def execute(self, ranger):
         if not ranger.camp_assignment:
+            # Camp may have expired while this strategy was active.
             ranger.behavior = RangerStrategy()
             ranger.behavior.execute(ranger)
             return
@@ -97,6 +98,7 @@ class PursuePoacherStrategy:
         ranger.state = f"PURSUING {self.poacher.name}"
         ranger.move_towards(self.poacher.x, self.poacher.y, RANGER_PURSUIT_STEP)
 
+        # Arrests are intentionally close-range so chases can play out on the map.
         if abs(ranger.x - self.poacher.x) + abs(ranger.y - self.poacher.y) <= 1:
             if hasattr(self.poacher, "arrest"):
                 self.poacher.arrest(ranger)
@@ -155,6 +157,7 @@ class Ranger(threading.Thread, EventListener):
             if assigned_ranger and assigned_ranger is not self:
                 return
 
+            # If the engine did not nominate a ranger, only the local territory responds.
             event_territory = "south" if poacher.y >= GRID_HEIGHT // 2 else "north"
             if not assigned_ranger and event_territory != self.territory:
                 return
@@ -209,6 +212,7 @@ class Ranger(threading.Thread, EventListener):
                 time.sleep(0.1)
                 continue
 
+            # Behavior swaps happen from event callbacks, so movement runs under a lock.
             with self._lock:
                 self.behavior.execute(self)
 
@@ -226,6 +230,7 @@ class Ranger(threading.Thread, EventListener):
     def assign_camp(self, camp):
         with self._lock:
             self.camp_assignment = camp
+            # Pursuing a poacher is more urgent than walking to a new camp.
             if not isinstance(self.behavior, PursuePoacherStrategy):
                 self.behavior = CampPatrolStrategy(camp)
             self._print(f"⛺  {self.name} is setting a temporary camp at "

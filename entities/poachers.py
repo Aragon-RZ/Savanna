@@ -23,10 +23,12 @@ class PoachStrategy(PoacherStrategy):
             poacher.arrest(ranger)
             return
         if ranger and poacher.distance_to(ranger) <= POACHER_FLEE_RANGE:
+            # Seeing a ranger nearby changes the goal from poaching to escaping.
             poacher.behavior = FleeStrategy(ranger)
             poacher.behavior.execute(poacher, entities)
             return
 
+        # Retarget if the intended animal died or disappeared before the poacher arrived.
         target = poacher.target
         if not target or not getattr(target, "is_alive", False):
             target = poacher.find_target(entities)
@@ -40,6 +42,7 @@ class PoachStrategy(PoacherStrategy):
         poacher.state = f"POACHING {target.name}"
         poacher.move_towards(target.x, target.y, POACHER_STEP)
 
+        # A poacher must stay near the animal for several ticks before the attack lands.
         if poacher.distance_to(target) <= 1:
             poacher.poach_ticks += 1
             if poacher.poach_ticks >= POACHER_POACH_TICKS:
@@ -66,6 +69,7 @@ class FleeStrategy(PoacherStrategy):
         poacher.state = "FLEEING"
         exit_x, exit_y = poacher.exit_point
         if ranger and poacher.distance_to(ranger) <= POACHER_FLEE_RANGE:
+            # Move away from the ranger first; otherwise head directly to the original edge.
             dx = poacher.x - ranger.x
             dy = poacher.y - ranger.y
             if dx == 0 and dy == 0:
@@ -124,6 +128,7 @@ class Poacher(Entity):
         event_bus.emit(Event.POACHER_ESCAPED, {"poacher": self})
 
     def find_target(self, entities):
+        # Carnivores are excluded so poaching pressure focuses on vulnerable wildlife.
         prey = [
             entity for entity in entities
             if getattr(entity, "is_alive", False)

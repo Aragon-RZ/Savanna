@@ -42,6 +42,7 @@ from entities.vehicles import SafariJeep, BASE_X, BASE_Y
 
 
 POPULATION_PROFILE = [
+    # Species, display name, count, and approximate starting cluster.
     (Zebra, "Zebra", 18, 12, 18),
     (Elephant, "Elephant", 5, 24, 24),
     (Giraffe, "Giraffe", 7, 36, 18),
@@ -80,6 +81,7 @@ class SafariBuilder:
         """Creates the environment using a Composite zone tree."""
         water_zone = SavannaZone("Water Zone")
 
+        # Zones group related leaves so the engine can update one root object.
         river_path = [(8, 6), (18, 20), (25, 32), (42, 44), (55, 58), (55, 73), (88, 94)]
         river = River(name="Mara River", x=42, y=44, capacity=30, path_points=river_path)
         river.display_output = self.display_output
@@ -236,13 +238,14 @@ class SafariBuilder:
             )
             ranger.target_water = self.water
             ranger.engine_ref = self.engine
+            # UI builds workers first and starts them through the engine.
             if self.auto_start_workers:
                 ranger.start()
             self.engine.add_entity(ranger)
         return self
     
     def add_jeeps(self, count):
-    # Each jeep gets its own patrol zone
+        # Each jeep gets its own patrol zone.
         configs = [
             (BASE_X, BASE_Y, 15, 20, 14),
             (BASE_X, BASE_Y, 35, 75, 16),
@@ -287,6 +290,7 @@ class SafariBuilder:
             return []
 
         trip = dict(schedules[jeep_index])
+        # Short simulations should not receive impossible or near-empty camping trips.
         if trip["start_tick"] >= self.engine.max_ticks:
             return []
         trip["end_tick"] = min(trip["end_tick"], self.engine.max_ticks)

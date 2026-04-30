@@ -136,6 +136,7 @@ class CampingTripStrategy:
         self.waypoint = None
 
     def execute(self, jeep):
+        # When the trip window closes, mark it complete and hand control to the return strategy.
         if jeep.current_tick >= self.end_tick:
             jeep.completed_long_trips.add(self.schedule_index)
             jeep.active_long_trip = None
@@ -151,6 +152,7 @@ class CampingTripStrategy:
             jeep.move_towards(self.camp_x, self.camp_y, jeep.CRUISE_STEP)
             return
 
+        # Once at camp, the jeep roams locally to keep the trip visually active.
         target_x, target_y = self._current_waypoint(jeep)
         jeep.move_towards(target_x, target_y, jeep.PATROL_STEP)
 
@@ -245,9 +247,9 @@ class SafariJeep(threading.Thread, EventListener):
         self.current_hour = 0
         self.current_tick = 0
         self.known_entities = []
-        self.zone_x = zone_x        # 👈 new
-        self.zone_y = zone_y        # 👈 new
-        self.zone_radius = zone_radius  # 👈 new
+        self.zone_x = zone_x
+        self.zone_y = zone_y
+        self.zone_radius = zone_radius
         self.long_trip_schedule = long_trip_schedule or []
         self.completed_long_trips = set()
         self.active_long_trip = None
@@ -304,6 +306,7 @@ class SafariJeep(threading.Thread, EventListener):
                 camping = isinstance(self.behavior, CampingTripStrategy)
                 long_trip = self._scheduled_long_trip()
 
+                # Long trips take priority over normal tour windows, but not over refuelling.
                 if self.needs_refuel() and not camping and not isinstance(self.behavior, RefuelStrategy):
                     self.start_refuelling()
 
@@ -355,6 +358,7 @@ class SafariJeep(threading.Thread, EventListener):
         self.state = "ON TOUR"
 
     def depart_long_trip(self, schedule_index, trip):
+        # Store a copy so UI snapshots can show the active route without mutating the schedule.
         self.sightings = 0
         self.seats_taken = random.randint(max(1, self.seat_capacity - 2), self.seat_capacity)
         self.active_long_trip = dict(trip)
@@ -374,6 +378,7 @@ class SafariJeep(threading.Thread, EventListener):
         return isinstance(self.behavior, (PatrolRouteStrategy, ChaseStrategy, CampingTripStrategy))
 
     def _scheduled_long_trip(self):
+        # Return the first uncompleted trip whose tick window is currently open.
         for index, trip in enumerate(self.long_trip_schedule):
             if index in self.completed_long_trips:
                 continue

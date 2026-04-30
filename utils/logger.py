@@ -31,6 +31,7 @@ class SimulationLogger:
 
         self.filepath = os.path.join(os.path.dirname(__file__), '..', filename)
         self.filepath = os.path.normpath(self.filepath)
+        # Keep this header in the same order as the row built in log().
         self.header = [
             "tick",
             "hour",
@@ -103,6 +104,7 @@ class SimulationLogger:
         from entities.animals import Carnivore, Herbivore, Insectivore
 
         metrics = metrics or {}
+        # Only animal-like entities have thirst/hunger, so humans and vehicles are excluded here.
         living = [
             e for e in entities
             if hasattr(e, 'is_alive') and e.is_alive and hasattr(e, 'thirst')
@@ -120,6 +122,7 @@ class SimulationLogger:
         alive_carnivores = sum(1 for e in living if isinstance(e, Carnivore))
         alive_insectivores = sum(1 for e in living if isinstance(e, Insectivore))
 
+        # Environment can be nested inside Composite zones; flatten before measuring resources.
         leaves = self._environment_leaves(environments)
         water_sources = [leaf for leaf in leaves if hasattr(leaf, "current_drinkers")]
         grazing_sources = [leaf for leaf in leaves if hasattr(leaf, "current_grazers")]
@@ -154,6 +157,7 @@ class SimulationLogger:
         )
         death_causes = metrics.get("deaths_by_cause", {})
 
+        # The row order mirrors self.header exactly.
         with open(self.filepath, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([
