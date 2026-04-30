@@ -50,15 +50,51 @@ class SeekWaterStrategy(BehaviorStrategy):
     def execute(self, animal, entities: list):
         if animal.target_water:
             animal.state = "SEEKING_WATER"
-            # Find closest watering hole by Manhattan distance
-            closest_water = min(
-                animal.target_water,
-                key=lambda w: abs(w.x - animal.x) + abs(w.y - animal.y)
-            )
-            animal.move_towards(closest_water.x, closest_water.y)
+            waters = animal.target_water if isinstance(animal.target_water, list) else [animal.target_water]
+            target_x, target_y = self._closest_water_point(animal, waters)
+            animal.move_towards(target_x, target_y)
         else:
             animal.state = "WANDERING"
             animal.move_randomly()
+
+    def _closest_water_point(self, animal, waters):
+        candidates = []
+        for water in waters:
+            points = getattr(water, "path_points", None) or [(water.x, water.y)]
+            for x, y in points:
+                distance = abs(x - animal.x) + abs(y - animal.y)
+                candidates.append((distance, x, y))
+        _, target_x, target_y = min(candidates)
+        return target_x, target_y
+
+
+class SeekFoodStrategy(BehaviorStrategy):
+    """Herbivore is hungry — moves to the closest grazing area."""
+    def execute(self, animal, entities: list):
+        food_sources = getattr(animal, "target_food", None)
+        if food_sources:
+            animal.state = "SEEKING_FOOD"
+            sources = food_sources if isinstance(food_sources, list) else [food_sources]
+            closest_food = min(sources, key=lambda f: abs(f.x - animal.x) + abs(f.y - animal.y))
+            animal.move_towards(closest_food.x, closest_food.y)
+        else:
+            animal.state = "WANDERING"
+            animal.move_randomly()
+
+
+class SeekInsectsStrategy(BehaviorStrategy):
+    """Insectivore is hungry — moves to the closest insect-rich patch."""
+    def execute(self, animal, entities: list):
+        food_sources = getattr(animal, "target_insects", None)
+        if food_sources:
+            animal.state = "SEEKING_INSECTS"
+            sources = food_sources if isinstance(food_sources, list) else [food_sources]
+            closest_food = min(sources, key=lambda f: abs(f.x - animal.x) + abs(f.y - animal.y))
+            animal.move_towards(closest_food.x, closest_food.y)
+        else:
+            animal.state = "WANDERING"
+            animal.move_randomly()
+
 
 class FleeStrategy(BehaviorStrategy):
     """

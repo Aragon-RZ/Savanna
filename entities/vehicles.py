@@ -109,6 +109,7 @@ class ReturnToBaseStrategy:
         if jeep.x == BASE_X and jeep.y == BASE_Y:
             jeep.behavior = None   # will be set to PARKED
             jeep.state = "PARKED"
+            jeep.seats_taken = 0
             jeep._print(f"   🚙 [{jeep.name}] Tour complete! "
                         f"Total sightings today: {jeep.sightings}")
 
@@ -121,7 +122,7 @@ class SafariJeep(threading.Thread, EventListener):
 
     def __init__(self, name: str, x: int = BASE_X, y: int = BASE_Y,
              zone_x: int = 5, zone_y: int = 5, zone_radius: int = 10,
-             display_output: bool = True):
+             display_output: bool = True, seat_capacity: int = 6):
         threading.Thread.__init__(self)
         self.name = name
         self.id = ""
@@ -130,6 +131,8 @@ class SafariJeep(threading.Thread, EventListener):
         self.state = "PARKED"
         self.is_alive = True
         self.sightings = 0
+        self.seat_capacity = seat_capacity
+        self.seats_taken = 0
         self.behavior = None
         self.daemon = True
         self.is_running = False
@@ -186,6 +189,7 @@ class SafariJeep(threading.Thread, EventListener):
                     tour_type = "NOCTURNAL SPECIAL" if nocturnal else "SAFARI TOUR"
                     self._print(f"\n🚙 [{self.name}] {tour_type} departing! Hour {self.current_hour}:00")
                     self.sightings = 0
+                    self.seats_taken = random.randint(max(1, self.seat_capacity // 2), self.seat_capacity)
                     self.behavior = PatrolRouteStrategy(self.zone_x, self.zone_y, self.zone_radius)  # 👈
                     last_tour_state = True
 
@@ -204,6 +208,7 @@ class SafariJeep(threading.Thread, EventListener):
                         self.behavior.execute(self)
                     elif self.state != "PARKED":
                         self.state = "PARKED"
+                        self.seats_taken = 0
 
             time.sleep(self.DRIVE_SPEED)
 

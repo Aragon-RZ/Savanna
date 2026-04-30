@@ -13,7 +13,8 @@ GRID_HEIGHT = 100
 # Survival Caps
 MAX_THIRST = 100
 MAX_HUNGER = 100
-THIRST_THRESHOLD = 70  # When animals start looking for water
-HUNGER_THRESHOLD = 60  # When carnivores start hunting
+THIRST_THRESHOLD = 45  # When animals start looking for water
+HUNGER_THRESHOLD = 40  # When animals start looking for food
+CARNIVORE_HUNT_THRESHOLD = 70  # When carnivores start actively hunting
 
-DESPERATION_THRESHOLD = 85  # When animals panic and break sleep cycles
+DESPERATION_THRESHOLD = 80  # When animals panic and break sleep cycles

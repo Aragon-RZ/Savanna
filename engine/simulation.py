@@ -51,6 +51,14 @@ class SimulationEngine(threading.Thread):
         with self._lock:
             self.environments.append(environment)
 
+    def add_environment_component(self, component):
+        with self._lock:
+            if self.environments and hasattr(self.environments[0], "add"):
+                self.environments[0].add(component)
+            else:
+                self.environments.append(component)
+        event_bus.emit(Event.ENVIRONMENT_ADDED, {"environment": component})
+
     def next_entity_id(self):
         with self._lock:
             numeric_ids = [
@@ -63,6 +71,18 @@ class SimulationEngine(threading.Thread):
         with self._lock:
             holes = self._water_hole_objects()
         return holes[0] if holes else None
+
+    def water_sources(self):
+        with self._lock:
+            return list(self._water_hole_objects())
+
+    def grazing_sources(self):
+        with self._lock:
+            return list(self._grazing_area_objects())
+
+    def insect_food_sources(self):
+        with self._lock:
+            return list(self._insect_feeding_objects())
 
     def pause(self):
         self._pause_event.clear()
@@ -239,6 +259,8 @@ class SimulationEngine(threading.Thread):
                 "entities": entity_snapshots,
                 "water_holes": water_holes,
                 "grazing_areas": self._grazing_area_snapshots(),
+                "insect_feeding_grounds": self._insect_feeding_snapshots(),
+                "land_objects": self._land_object_snapshots(),
                 "environment_status": [env.status() for env in self.environments],
                 "summary": {
                     "alive_total": len(alive_animals),
@@ -248,6 +270,7 @@ class SimulationEngine(threading.Thread):
                     "alive_insectivores": sum(1 for e in alive_animals if e["category"] == "insectivore"),
                     "avg_thirst": round(sum(thirst_values) / len(thirst_values), 1) if thirst_values else 0,
                     "avg_hunger": round(sum(hunger_values) / len(hunger_values), 1) if hunger_values else 0,
+                    "active_species": self._active_species(entity_snapshots),
                 }
             }
 
@@ -271,8 +294,20 @@ class SimulationEngine(threading.Thread):
             "thirst": getattr(entity, "thirst", None),
             "hunger": getattr(entity, "hunger", None),
             "sightings": getattr(entity, "sightings", None),
+            "seats_taken": getattr(entity, "seats_taken", None),
+            "seat_capacity": getattr(entity, "seat_capacity", None),
             "territory": getattr(entity, "territory", None),
         }
+
+    def _active_species(self, entity_snapshots):
+        counts = {}
+        for entity in entity_snapshots:
+            if not entity["is_alive"]:
+                continue
+            if entity["category"] not in {"herbivore", "carnivore", "insectivore"}:
+                continue
+            counts[entity["species"]] = counts.get(entity["species"], 0) + 1
+        return dict(sorted(counts.items()))
 
     def _entity_category(self, entity):
         species = entity.__class__.__name__
@@ -290,8 +325,10 @@ class SimulationEngine(threading.Thread):
         return [
             {
                 "name": hole.name,
+                "kind": hole.__class__.__name__,
                 "x": hole.x,
                 "y": hole.y,
+                "path_points": getattr(hole, "path_points", None),
                 "capacity": hole.capacity,
                 "drinkers": len(hole.current_drinkers),
                 "drinker_names": [e.name for e in hole.current_drinkers],
@@ -301,32 +338,13 @@ class SimulationEngine(threading.Thread):
         ]
 
     def _water_hole_objects(self):
-        leaves = []
-        for env in self.environments:
-            if hasattr(env, "get_all_leaves"):
-                leaves.extend(env.get_all_leaves())
-            else:
-                leaves.append(env)
-
         return [
-            leaf for leaf in leaves
+            leaf for leaf in self._environment_leaves()
             if hasattr(leaf, "capacity") and hasattr(leaf, "current_drinkers")
         ]
 
     def _grazing_area_snapshots(self):
         """Return a list of grazing area snapshots (capacity, grazers, free spots)."""
-        leaves = []
-        for env in self.environments:
-            if hasattr(env, "get_all_leaves"):
-                leaves.extend(env.get_all_leaves())
-            else:
-                leaves.append(env)
-
-        grazing_areas = [
-            leaf for leaf in leaves
-            if hasattr(leaf, "capacity") and hasattr(leaf, "current_grazers")
-        ]
-
         return [
             {
                 "name": area.name,
@@ -337,5 +355,52 @@ class SimulationEngine(threading.Thread):
                 "grazer_names": [e.name for e in area.current_grazers],
                 "free_spots": area.capacity - len(area.current_grazers),
             }
-            for area in grazing_areas
+            for area in self._grazing_area_objects()
         ]
+
+    def _grazing_area_objects(self):
+        return [
+            leaf for leaf in self._environment_leaves()
+            if hasattr(leaf, "capacity") and hasattr(leaf, "current_grazers")
+        ]
+
+    def _insect_feeding_snapshots(self):
+        return [
+            {
+                "name": area.name,
+                "x": area.x,
+                "y": area.y,
+                "capacity": area.capacity,
+                "feeders": len(area.current_feeders),
+                "feeder_names": [e.name for e in area.current_feeders],
+                "free_spots": area.capacity - len(area.current_feeders),
+            }
+            for area in self._insect_feeding_objects()
+        ]
+
+    def _insect_feeding_objects(self):
+        return [
+            leaf for leaf in self._environment_leaves()
+            if hasattr(leaf, "capacity") and hasattr(leaf, "current_feeders")
+        ]
+
+    def _land_object_snapshots(self):
+        return [
+            {
+                "name": obj.name,
+                "x": obj.x,
+                "y": obj.y,
+                "land_type": getattr(obj, "land_type", "land"),
+            }
+            for obj in self._environment_leaves()
+            if hasattr(obj, "land_type")
+        ]
+
+    def _environment_leaves(self):
+        leaves = []
+        for env in self.environments:
+            if hasattr(env, "get_all_leaves"):
+                leaves.extend(env.get_all_leaves())
+            else:
+                leaves.append(env)
+        return leaves

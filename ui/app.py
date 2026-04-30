@@ -5,6 +5,13 @@ import tkinter as tk
 from tkinter import ttk
 
 from engine.builder import POPULATION_PROFILE, SafariBuilder
+from environment.nature import (
+    GrazingArea,
+    InsectivoreFeedingGround,
+    RangerStation,
+    SafariStation,
+    WateringHole,
+)
 from entities.animals import (
     Antelope,
     Buffalo,
@@ -12,6 +19,8 @@ from entities.animals import (
     Cheetah,
     Elephant,
     Giraffe,
+    Herbivore,
+    Insectivore,
     Leopard,
     Lion,
     Meerkat,
@@ -34,6 +43,7 @@ EVENT_TYPES = [
     Event.WEATHER_CHANGED,
     Event.ANIMAL_DESPERATE,
     Event.ENTITY_ADDED,
+    Event.ENVIRONMENT_ADDED,
 ]
 
 ANIMAL_TYPES = {
@@ -52,7 +62,15 @@ ANIMAL_TYPES = {
     "Cheetah": Cheetah,
 }
 
-OBJECT_TYPES = list(ANIMAL_TYPES) + ["Ranger", "SafariJeep"]
+LAND_OBJECT_TYPES = [
+    "WateringHole",
+    "GrazingArea",
+    "InsectivoreFeedingGround",
+    "RangerStation",
+    "SafariStation",
+]
+
+OBJECT_TYPES = list(ANIMAL_TYPES) + ["Ranger", "SafariJeep"] + LAND_OBJECT_TYPES
 
 
 class UiEventCollector(EventListener):
@@ -91,8 +109,9 @@ class UiEventCollector(EventListener):
         if event_type == Event.GRAZING_SPOT_FREED:
             environment = payload.get("environment")
             freed_by = payload.get("freed_by")
+            label = "Forage" if hasattr(environment, "current_feeders") else "Grazing"
             return (
-                f"Grazing: {getattr(environment, 'name', 'Grazing area')} "
+                f"{label}: {getattr(environment, 'name', 'Feeding area')} "
                 f"freed by {getattr(freed_by, 'name', 'an animal')}"
             )
 
@@ -102,6 +121,10 @@ class UiEventCollector(EventListener):
         if event_type == Event.ENTITY_ADDED:
             entity = payload.get("entity")
             return f"Added: {getattr(entity, 'name', 'Entity')}"
+
+        if event_type == Event.ENVIRONMENT_ADDED:
+            environment = payload.get("environment")
+            return f"Placed: {getattr(environment, 'name', 'Map object')}"
 
         return event_type
 
@@ -127,6 +150,7 @@ class SavannaApp(tk.Tk):
         self.object_x_var = tk.IntVar(value=50)
         self.object_y_var = tk.IntVar(value=50)
         self.random_position_var = tk.BooleanVar(value=True)
+        self.cursor_place_var = tk.BooleanVar(value=False)
         self.populate_scale_var = tk.IntVar(value=1)
         self.summary_vars = {}
 
@@ -204,11 +228,12 @@ class SavannaApp(tk.Tk):
         )
         self.map_canvas.grid(row=0, column=0, sticky="nsew")
         self.map_canvas.bind("<Configure>", lambda _event: self._render_last_snapshot())
+        self.map_canvas.bind("<Button-1>", self._on_map_click)
 
         side = ttk.Frame(body, padding=(8, 10, 10, 10))
         side.columnconfigure(0, weight=1)
-        side.rowconfigure(3, weight=1)
         side.rowconfigure(5, weight=1)
+        side.rowconfigure(7, weight=1)
         body.add(side, weight=1)
 
         metrics = ttk.LabelFrame(side, text="Status", padding=10)
@@ -227,6 +252,8 @@ class SavannaApp(tk.Tk):
             "Avg hunger",
             "Water",
             "Grazing",
+            "Insect food",
+            "Buildings",
         ]):
             ttk.Label(metrics, text=key, style="Metric.TLabel").grid(
                 row=index, column=0, sticky="w"
@@ -238,8 +265,23 @@ class SavannaApp(tk.Tk):
             )
         metrics.columnconfigure(1, weight=1)
 
+        ttk.Label(side, text="Active Species", style="Title.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(12, 6)
+        )
+        self.species_table = ttk.Treeview(
+            side,
+            columns=("species", "count"),
+            show="headings",
+            height=5
+        )
+        self.species_table.heading("species", text="Species")
+        self.species_table.heading("count", text="Count")
+        self.species_table.column("species", width=150, anchor="w", stretch=True)
+        self.species_table.column("count", width=60, anchor="e", stretch=False)
+        self.species_table.grid(row=2, column=0, sticky="ew")
+
         spawner = ttk.LabelFrame(side, text="Add Object", padding=10)
-        spawner.grid(row=1, column=0, sticky="ew", pady=(12, 0))
+        spawner.grid(row=3, column=0, sticky="ew", pady=(12, 0))
         spawner.columnconfigure(1, weight=1)
         spawner.columnconfigure(3, weight=1)
 
@@ -266,7 +308,13 @@ class SavannaApp(tk.Tk):
             spawner,
             text="Random",
             variable=self.random_position_var
-        ).grid(row=1, column=2, columnspan=2, sticky="w", pady=(8, 0))
+        ).grid(row=1, column=2, sticky="w", pady=(8, 0))
+
+        ttk.Checkbutton(
+            spawner,
+            text="Cursor",
+            variable=self.cursor_place_var
+        ).grid(row=1, column=3, sticky="e", pady=(8, 0))
 
         ttk.Label(spawner, text="X").grid(row=2, column=0, sticky="w", pady=(8, 0))
         ttk.Spinbox(
@@ -301,7 +349,7 @@ class SavannaApp(tk.Tk):
         )
 
         ttk.Label(side, text="Entities", style="Title.TLabel").grid(
-            row=2, column=0, sticky="w", pady=(14, 6)
+            row=4, column=0, sticky="w", pady=(14, 6)
         )
         self.entity_table = ttk.Treeview(
             side,
@@ -317,10 +365,10 @@ class SavannaApp(tk.Tk):
         }.items():
             self.entity_table.heading(column, text=column.title())
             self.entity_table.column(column, width=width, anchor="w", stretch=True)
-        self.entity_table.grid(row=3, column=0, sticky="nsew")
+        self.entity_table.grid(row=5, column=0, sticky="nsew")
 
         ttk.Label(side, text="Events", style="Title.TLabel").grid(
-            row=4, column=0, sticky="w", pady=(14, 6)
+            row=6, column=0, sticky="w", pady=(14, 6)
         )
         self.events_list = tk.Listbox(
             side,
@@ -330,7 +378,7 @@ class SavannaApp(tk.Tk):
             highlightthickness=1,
             highlightbackground="#c4c9b8"
         )
-        self.events_list.grid(row=5, column=0, sticky="nsew")
+        self.events_list.grid(row=7, column=0, sticky="nsew")
 
     def _new_engine(self):
         self._detach_event_collector()
@@ -409,11 +457,21 @@ class SavannaApp(tk.Tk):
 
         for _ in range(count):
             x, y = self._selected_position()
-            entity = self._create_object(object_type, x, y)
-            self.engine.add_entity(entity)
+            self._place_object(object_type, x, y)
 
         self._append_event("UI", f"Queued {count} {object_type}")
         self._render_snapshot(self.engine.snapshot())
+
+    def _place_object(self, object_type, x, y):
+        if object_type in LAND_OBJECT_TYPES:
+            environment = self._create_land_object(object_type, x, y)
+            self.engine.add_environment_component(environment)
+            self._refresh_animal_targets()
+            return environment
+
+        entity = self._create_object(object_type, x, y)
+        self.engine.add_entity(entity)
+        return entity
 
     def _populate_more(self):
         self._ensure_editable_engine()
@@ -465,11 +523,39 @@ class SavannaApp(tk.Tk):
         jeep.known_entities = self.engine.entities
         return jeep
 
+    def _create_land_object(self, object_type, x, y):
+        name = self._next_environment_name(object_type)
+        if object_type == "WateringHole":
+            obj = WateringHole(name=name, x=x, y=y, capacity=7)
+        elif object_type == "GrazingArea":
+            obj = GrazingArea(name=name, x=x, y=y, capacity=10)
+        elif object_type == "InsectivoreFeedingGround":
+            obj = InsectivoreFeedingGround(name=name, x=x, y=y, capacity=8)
+        elif object_type == "RangerStation":
+            obj = RangerStation(name, x, y)
+        else:
+            obj = SafariStation(name, x, y)
+
+        obj.display_output = False
+        return obj
+
     def _create_animal(self, animal_class, base_name, x, y):
         animal = animal_class(self.engine.next_entity_id(), self._next_name(base_name), x, y)
-        animal.target_water = self.engine.first_water_hole()
+        self._configure_animal_targets(animal)
         animal.display_output = False
         return animal
+
+    def _configure_animal_targets(self, animal):
+        animal.target_water = self.engine.water_sources()
+        if isinstance(animal, Insectivore):
+            animal.target_insects = self.engine.insect_food_sources()
+        elif isinstance(animal, Herbivore):
+            animal.target_food = self.engine.grazing_sources()
+
+    def _refresh_animal_targets(self):
+        for entity in self.engine.entities:
+            if hasattr(entity, "thirst"):
+                self._configure_animal_targets(entity)
 
     def _selected_position(self):
         if self.random_position_var.get():
@@ -482,11 +568,52 @@ class SavannaApp(tk.Tk):
             self._clamp(self._bounded_int(self.object_y_var, 50, 0, GRID_HEIGHT - 1), GRID_HEIGHT),
         )
 
+    def _on_map_click(self, event):
+        x, y = self._grid_from_canvas(event.x, event.y)
+        self.object_x_var.set(x)
+        self.object_y_var.set(y)
+        self.random_position_var.set(False)
+
+        if not self.cursor_place_var.get():
+            return
+
+        self._ensure_editable_engine()
+        object_type = self.object_type_var.get()
+        self._place_object(object_type, x, y)
+        self._append_event("UI", f"Placed {object_type} at {x},{y}")
+        self._render_snapshot(self.engine.snapshot())
+
+    def _grid_from_canvas(self, pixel_x, pixel_y):
+        width, height, pad, map_width, map_height = self._map_geometry()
+        clamped_x = max(pad, min(width - pad, pixel_x))
+        clamped_y = max(pad, min(height - pad, pixel_y))
+        grid_x = round(((clamped_x - pad) / max(map_width, 1)) * (GRID_WIDTH - 1))
+        grid_y = round(((clamped_y - pad) / max(map_height, 1)) * (GRID_HEIGHT - 1))
+        return self._clamp(grid_x, GRID_WIDTH), self._clamp(grid_y, GRID_HEIGHT)
+
     def _next_name(self, base_name):
         prefix = f"{base_name} "
         highest = 0
         for entity in self.engine.entities:
             name = getattr(entity, "name", "")
+            if name.startswith(prefix):
+                suffix = name[len(prefix):]
+                if suffix.isdigit():
+                    highest = max(highest, int(suffix))
+        return f"{base_name} {highest + 1}"
+
+    def _next_environment_name(self, base_name):
+        prefix = f"{base_name} "
+        highest = 0
+        snapshot = self.engine.snapshot()
+        objects = (
+            snapshot.get("water_holes", [])
+            + snapshot.get("grazing_areas", [])
+            + snapshot.get("insect_feeding_grounds", [])
+            + snapshot.get("land_objects", [])
+        )
+        for item in objects:
+            name = item.get("name", "")
             if name.startswith(prefix):
                 suffix = name[len(prefix):]
                 if suffix.isdigit():
@@ -543,6 +670,7 @@ class SavannaApp(tk.Tk):
     def _render_snapshot(self, snapshot):
         self.last_snapshot = snapshot
         self._render_summary(snapshot)
+        self._render_species(snapshot["summary"].get("active_species", {}))
         self._render_entities(snapshot["entities"])
         self._render_map(snapshot)
 
@@ -566,6 +694,11 @@ class SavannaApp(tk.Tk):
             area = snapshot["grazing_areas"][0]
             grazing = f"{area['grazers']}/{area['capacity']}"
 
+        insect_food = "none"
+        if snapshot.get("insect_feeding_grounds"):
+            area = snapshot["insect_feeding_grounds"][0]
+            insect_food = f"{area['feeders']}/{area['capacity']}"
+
         values = {
             "Run": status,
             "Tick": f"{snapshot['tick']} / {snapshot['max_ticks']}",
@@ -580,6 +713,8 @@ class SavannaApp(tk.Tk):
             "Avg hunger": str(summary["avg_hunger"]),
             "Water": water,
             "Grazing": grazing,
+            "Insect food": insect_food,
+            "Buildings": str(len(snapshot.get("land_objects", []))),
         }
         for key, value in values.items():
             self.summary_vars[key].set(value)
@@ -591,6 +726,8 @@ class SavannaApp(tk.Tk):
             needs = "-"
             if entity["thirst"] is not None and entity["hunger"] is not None:
                 needs = f"T{entity['thirst']} H{entity['hunger']}"
+            elif entity["seat_capacity"] is not None:
+                needs = f"Seats {entity['seats_taken']}/{entity['seat_capacity']}"
             pos = f"{entity['x']},{entity['y']}"
             self.entity_table.insert(
                 "",
@@ -598,15 +735,16 @@ class SavannaApp(tk.Tk):
                 values=(entity["species"], entity["state"], pos, needs)
             )
 
+    def _render_species(self, species_counts):
+        self.species_table.delete(*self.species_table.get_children())
+        for species, count in species_counts.items():
+            self.species_table.insert("", tk.END, values=(species, count))
+
     def _render_map(self, snapshot):
         canvas = self.map_canvas
         canvas.delete("all")
 
-        width = max(canvas.winfo_width(), 400)
-        height = max(canvas.winfo_height(), 400)
-        pad = 18
-        map_width = width - pad * 2
-        map_height = height - pad * 2
+        width, height, pad, map_width, map_height = self._map_geometry()
 
         canvas.create_rectangle(
             pad, pad, width - pad, height - pad,
@@ -625,20 +763,68 @@ class SavannaApp(tk.Tk):
         canvas.create_line(pad, mid_y, width - pad, mid_y, fill="#778a62", dash=(5, 4))
 
         for hole in snapshot["water_holes"]:
-            self._draw_water_hole(canvas, hole, pad, map_width, map_height)
+            if hole.get("kind") == "River":
+                self._draw_river(canvas, hole, pad, map_width, map_height)
+
+        for hole in snapshot["water_holes"]:
+            if hole.get("kind") != "River":
+                self._draw_water_hole(canvas, hole, pad, map_width, map_height)
 
         # Draw grazing areas
         for area in snapshot.get("grazing_areas", []):
             self._draw_grazing_area(canvas, area, pad, map_width, map_height)
 
+        for area in snapshot.get("insect_feeding_grounds", []):
+            self._draw_insect_feeding_ground(canvas, area, pad, map_width, map_height)
+
+        for land_object in snapshot.get("land_objects", []):
+            self._draw_land_object(canvas, land_object, pad, map_width, map_height)
+
         for entity in snapshot["entities"]:
             self._draw_entity(canvas, entity, pad, map_width, map_height)
+
+    def _map_geometry(self):
+        canvas = self.map_canvas
+        width = max(canvas.winfo_width(), 400)
+        height = max(canvas.winfo_height(), 400)
+        pad = 18
+        return width, height, pad, width - pad * 2, height - pad * 2
 
     def _sx(self, value, pad, map_width):
         return pad + (float(value) / max(GRID_WIDTH - 1, 1)) * map_width
 
     def _sy(self, value, pad, map_height):
         return pad + (float(value) / max(GRID_HEIGHT - 1, 1)) * map_height
+
+    def _draw_river(self, canvas, river, pad, map_width, map_height):
+        path = river.get("path_points") or []
+        points = []
+        for grid_x, grid_y in path:
+            points.extend([
+                self._sx(grid_x, pad, map_width),
+                self._sy(grid_y, pad, map_height),
+            ])
+        if len(points) < 4:
+            return
+
+        line_options = {
+            "smooth": True,
+            "capstyle": tk.ROUND,
+            "joinstyle": tk.ROUND,
+        }
+        canvas.create_line(*points, fill="#c8f1ff", width=22, **line_options)
+        canvas.create_line(*points, fill="#63c4e4", width=15, **line_options)
+        canvas.create_line(*points, fill="#2384b5", width=5, **line_options)
+
+        x = self._sx(river["x"], pad, map_width)
+        y = self._sy(river["y"], pad, map_height)
+        canvas.create_text(
+            x + 14, y - 16,
+            text=f"{river['name']} {river['drinkers']}/{river['capacity']}",
+            anchor="w",
+            fill="#16506c",
+            font=("Helvetica", 10, "bold")
+        )
 
     def _draw_water_hole(self, canvas, hole, pad, map_width, map_height):
         x = self._sx(hole["x"], pad, map_width)
@@ -655,6 +841,66 @@ class SavannaApp(tk.Tk):
             text=f"{hole['name']} {hole['drinkers']}/{hole['capacity']}",
             anchor="w",
             fill="#1e4f6d",
+            font=("Helvetica", 10, "bold")
+        )
+
+    def _draw_insect_feeding_ground(self, canvas, area, pad, map_width, map_height):
+        x = self._sx(area["x"], pad, map_width)
+        y = self._sy(area["y"], pad, map_height)
+        radius_x = 18
+        radius_y = 10
+        canvas.create_oval(
+            x - radius_x, y - radius_y, x + radius_x, y + radius_y,
+            fill="#d8b86a",
+            outline="#8f6b21",
+            width=2
+        )
+        for dx, dy in [(-7, -2), (0, 3), (7, -1)]:
+            canvas.create_oval(
+                x + dx - 2, y + dy - 2, x + dx + 2, y + dy + 2,
+                fill="#654716",
+                outline=""
+            )
+        canvas.create_text(
+            x + radius_x + 6, y,
+            text=f"{area['name']} {area['feeders']}/{area['capacity']}",
+            anchor="w",
+            fill="#5c4218",
+            font=("Helvetica", 10, "bold")
+        )
+
+    def _draw_land_object(self, canvas, land_object, pad, map_width, map_height):
+        x = self._sx(land_object["x"], pad, map_width)
+        y = self._sy(land_object["y"], pad, map_height)
+        land_type = land_object.get("land_type", "land")
+        if land_type == "ranger_station":
+            fill, outline, roof, label = "#35614a", "#183425", "#244c38", "R"
+        else:
+            fill, outline, roof, label = "#c78b42", "#6a4318", "#9c6027", "S"
+
+        width = 20
+        height = 16
+        canvas.create_polygon(
+            x - width / 2 - 2, y - height / 2,
+            x, y - height / 2 - 10,
+            x + width / 2 + 2, y - height / 2,
+            fill=roof,
+            outline=outline,
+            width=2
+        )
+        canvas.create_rectangle(
+            x - width / 2, y - height / 2,
+            x + width / 2, y + height / 2,
+            fill=fill,
+            outline=outline,
+            width=2
+        )
+        canvas.create_text(x, y, text=label, fill="#ffffff", font=("Helvetica", 9, "bold"))
+        canvas.create_text(
+            x + width / 2 + 7, y,
+            text=land_object["name"],
+            anchor="w",
+            fill=outline,
             font=("Helvetica", 10, "bold")
         )
 

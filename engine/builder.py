@@ -10,7 +10,14 @@
 
 import random
 from engine.simulation import SimulationEngine
-from environment.nature import WateringHole, GrazingArea, River
+from environment.nature import (
+    GrazingArea,
+    InsectivoreFeedingGround,
+    RangerStation,
+    River,
+    SafariStation,
+    WateringHole,
+)
 from environment.base import SavannaZone
 from entities.animals import (
     Antelope,
@@ -19,6 +26,8 @@ from entities.animals import (
     Cheetah,
     Elephant,
     Giraffe,
+    Herbivore,
+    Insectivore,
     Leopard,
     Lion,
     Meerkat,
@@ -42,9 +51,9 @@ POPULATION_PROFILE = [
     (Ostrich, "Ostrich", 7, 18, 76),
     (Meerkat, "Meerkat", 10, 68, 76),
     (BushBaby, "BushBaby", 8, 58, 86),
-    (Lion, "Lion", 6, 28, 38),
-    (Leopard, "Leopard", 3, 76, 18),
-    (Cheetah, "Cheetah", 4, 84, 60),
+    (Lion, "Lion", 1, 28, 38),
+    (Leopard, "Leopard", 1, 76, 18),
+    (Cheetah, "Cheetah", 1, 84, 60),
     (Pangolin, "Pangolin", 4, 62, 54),
 ]
 
@@ -60,48 +69,71 @@ class SafariBuilder:
             tick_rate=tick_rate
         )
         self.water = []
+        self.grazing_areas = []
+        self.insect_feeding_grounds = []
+        self.land_objects = []
         self.animal_counter = 1
         self.auto_start_workers = auto_start_workers
         self.display_output = display_output
 
     def build_environment(self):
         """Creates the environment using a Composite zone tree."""
-        # Water Sources — Oasis
-        for i in range(4):
-            water = WateringHole(name=f"Oasis-{i}",
-                                        x=random.randint(0, GRID_WIDTH - 1), 
-                                        y=random.randint(0, GRID_HEIGHT - 1),
-                                        capacity=random.randint(3, 9))
-            water.display_output = self.display_output
-            self.water.append(water)
-
-        # COMPOSITE — wrap in a zone; add more leaves later freely
         water_zone = SavannaZone("Water Zone")
-        for water in self.water:
-            water_zone.add(water)
 
-        # River — a major water source with high capacity
-        river = River(name="Great River",
-                     x=random.randint(20, 60),
-                     y=random.randint(20, 60),
-                     capacity=12)
+        river_path = [(8, 6), (18, 20), (25, 32), (42, 44), (55, 58), (55, 73), (88, 94)]
+        river = River(name="Mara River", x=42, y=44, capacity=30, path_points=river_path)
         river.display_output = self.display_output
+        self.water.append(river)
         water_zone.add(river)
 
-        # Grazing Areas — vegetation-rich zones where herbivores feed
+        for name, x, y, capacity in [
+            ("North Bend Oasis", 70, 24, 7),
+            ("Acacia Pool", 82, 61, 6),
+            ("Southbank Pool", 30, 78, 8),
+        ]:
+            water = WateringHole(name=name, x=x, y=y, capacity=capacity)
+            water.display_output = self.display_output
+            self.water.append(water)
+            water_zone.add(water)
+
         grazing_zone = SavannaZone("Grazing Zone")
-        for i in range(1, 4):
-            grazing = GrazingArea(name=f"Grazing Ground-{i}",
-                                 x=random.randint(0, GRID_WIDTH - 1),
-                                 y=random.randint(0, GRID_HEIGHT - 1),
-                                 capacity=random.randint(5, 10))
+        for name, x, y, capacity in [
+            ("West Grassland", 18, 42, 12),
+            ("Central Grazing Plain", 47, 36, 14),
+            ("Southern Grassland", 66, 68, 12),
+            ("Dry Meadow", 36, 82, 8),
+        ]:
+            grazing = GrazingArea(name=name, x=x, y=y, capacity=capacity)
             grazing.display_output = self.display_output
+            self.grazing_areas.append(grazing)
             grazing_zone.add(grazing)
+
+        insect_zone = SavannaZone("Insectivore Food Zone")
+        for name, x, y, capacity in [
+            ("Termite Mound", 63, 58, 8),
+            ("Rocky Foraging Patch", 82, 34, 6),
+            ("Night Insect Grove", 55, 88, 8),
+        ]:
+            feeding_ground = InsectivoreFeedingGround(name=name, x=x, y=y, capacity=capacity)
+            feeding_ground.display_output = self.display_output
+            self.insect_feeding_grounds.append(feeding_ground)
+            insect_zone.add(feeding_ground)
+
+        land_zone = SavannaZone("Buildings Zone")
+        for building in [
+            RangerStation("Ranger Station", 12, 52),
+            SafariStation("Safari Station", 8, 14),
+        ]:
+            building.display_output = self.display_output
+            self.land_objects.append(building)
+            land_zone.add(building)
 
         # Build the full savanna tree
         savanna = SavannaZone("Savanna")
         savanna.add(water_zone)
         savanna.add(grazing_zone)
+        savanna.add(insect_zone)
+        savanna.add(land_zone)
 
         # Engine gets the root zone — one object, whole tree
         self.engine.add_environment(savanna)
@@ -112,10 +144,17 @@ class SafariBuilder:
             x = max(0, min(GRID_WIDTH - 1, start_x + random.randint(-6, 6)))
             y = max(0, min(GRID_HEIGHT - 1, start_y + random.randint(-6, 6)))
             animal = animal_class(self.animal_counter, f"{base_name} {i+1}", x, y)
-            animal.target_water = self.water
+            self._configure_animal_targets(animal)
             animal.display_output = self.display_output
             self.engine.add_entity(animal)
             self.animal_counter += 1
+
+    def _configure_animal_targets(self, animal):
+        animal.target_water = self.water
+        if isinstance(animal, Insectivore):
+            animal.target_insects = self.insect_feeding_grounds
+        elif isinstance(animal, Herbivore):
+            animal.target_food = self.grazing_areas
 
     def add_population_profile(self, scale=1):
         """Populate the savanna with a broad, scalable species mix."""
@@ -212,7 +251,8 @@ class SafariBuilder:
             start_x, start_y, zone_x, zone_y, radius = configs[i]
             jeep = SafariJeep(name=f"Jeep {i+1}", x=start_x, y=start_y,
                             zone_x=zone_x, zone_y=zone_y, zone_radius=radius,
-                            display_output=self.display_output)
+                            display_output=self.display_output,
+                            seat_capacity=random.choice([6, 8, 10]))
             jeep.known_entities = self.engine.entities
             if self.auto_start_workers:
                 jeep.start()

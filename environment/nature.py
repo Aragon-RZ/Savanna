@@ -180,6 +180,68 @@ class GrazingArea(EnvironmentComponent):
             print(*args, **kwargs)
 
 
+class InsectivoreFeedingGround(EnvironmentComponent):
+    """
+    Feeding ground for insectivores. It behaves like a shared food
+    resource so multiple insectivores can feed without blocking the
+    whole simulation.
+    """
+
+    def __init__(self, name: str, x: int, y: int, capacity: int = 5):
+        super().__init__(name, x, y)
+        self.capacity = capacity
+        self.spots = threading.Semaphore(capacity)
+        self.current_feeders: list = []
+        self.display_output = True
+
+    def update(self, tick: int, entities: list):
+        for entity in list(self.current_feeders):
+            if entity.state != "FORAGING":
+                self.finish_feeding(entity)
+
+        for entity in entities:
+            if entity.is_alive and entity.state in ["SEEKING_INSECTS", "WAITING_TO_FORAGE"]:
+                if entity.x == self.x and entity.y == self.y:
+                    self.try_to_feed(entity)
+
+    def status(self) -> str:
+        feeder_names = ", ".join(e.name for e in self.current_feeders) or "none"
+        free = self.capacity - len(self.current_feeders)
+        return (f"{self.name} | Insectivore capacity: {self.capacity} | "
+                f"Feeding: {len(self.current_feeders)} ({feeder_names}) | "
+                f"Free spots: {free}")
+
+    def try_to_feed(self, entity) -> bool:
+        if entity in self.current_feeders:
+            return True
+
+        if self.spots.acquire(blocking=False):
+            entity.state = "FORAGING"
+            self.current_feeders.append(entity)
+            self._print(f"{entity.name} started foraging at {self.name}.")
+            return True
+
+        entity.state = "WAITING_TO_FORAGE"
+        self._print(f"{entity.name} is waiting to forage at {self.name}.")
+        return False
+
+    def finish_feeding(self, entity):
+        if entity in self.current_feeders:
+            self.current_feeders.remove(entity)
+            self.spots.release()
+            entity.hunger = max(0, entity.hunger - 25)
+            self._print(f"{entity.name} finished foraging at {self.name}.")
+
+            event_bus.emit(Event.GRAZING_SPOT_FREED, {
+                "environment": self,
+                "freed_by": entity
+            })
+
+    def _print(self, *args, **kwargs):
+        if self.display_output:
+            print(*args, **kwargs)
+
+
 class River(EnvironmentComponent):
     """
     A river running across the savanna. Multiple animals can
@@ -189,11 +251,19 @@ class River(EnvironmentComponent):
     OBSERVER  : emits WATER_SPOT_FREED when space opens.
     """
 
-    def __init__(self, name: str, x: int, y: int, capacity: int = 10):
+    def __init__(self, name: str, x: int, y: int, capacity: int = 10,
+                 path_points=None):
         super().__init__(name, x, y)
         self.capacity = capacity
         self.spots = threading.Semaphore(capacity)
         self.current_drinkers: list = []
+        self.path_points = path_points or [
+            (max(0, x - 18), 0),
+            (max(0, x - 10), max(0, y - 22)),
+            (x, y),
+            (min(99, x + 12), min(99, y + 24)),
+            (min(99, x + 20), 99),
+        ]
         self.display_output = True
 
     def update(self, tick: int, entities: list):
@@ -209,7 +279,7 @@ class River(EnvironmentComponent):
         # Let in any entity at our location wanting water
         for entity in entities:
             if entity.is_alive and entity.state in ["SEEKING_WATER", "WAITING_IN_LINE"]:
-                if entity.x == self.x and entity.y == self.y:
+                if self.contains_location(entity.x, entity.y):
                     self.try_to_drink(entity)
 
     def status(self) -> str:
@@ -254,3 +324,30 @@ class River(EnvironmentComponent):
     def _print(self, *args, **kwargs):
         if self.display_output:
             print(*args, **kwargs)
+
+    def contains_location(self, x: int, y: int) -> bool:
+        return any(abs(px - x) + abs(py - y) <= 1 for px, py in self.path_points)
+
+
+class LandObject(EnvironmentComponent):
+    """Static map object used by the UI and future mechanics."""
+
+    land_type = "land"
+
+    def __init__(self, name: str, x: int, y: int):
+        super().__init__(name, x, y)
+        self.display_output = True
+
+    def update(self, tick: int, entities: list):
+        pass
+
+    def status(self) -> str:
+        return f"{self.name} | {self.land_type} @ ({self.x}, {self.y})"
+
+
+class RangerStation(LandObject):
+    land_type = "ranger_station"
+
+
+class SafariStation(LandObject):
+    land_type = "safari_station"

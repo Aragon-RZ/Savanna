@@ -31,6 +31,7 @@ class Event:
     WEATHER_CHANGED  = "weather_changed"   # payload: { "weather": str }
     ANIMAL_DESPERATE = "animal_desperate"  # payload: { "entity": animal }
     ENTITY_ADDED     = "entity_added"      # payload: { "entity": entity }
+    ENVIRONMENT_ADDED = "environment_added" # payload: { "environment": component }
 
 
 # ── LISTENER INTERFACE ───────────────────────────────────────
