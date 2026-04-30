@@ -361,7 +361,7 @@ class SavannaApp(tk.Tk):
             "species": 88,
             "state": 118,
             "pos": 62,
-            "needs": 76,
+            "needs": 112,
         }.items():
             self.entity_table.heading(column, text=column.title())
             self.entity_table.column(column, width=width, anchor="w", stretch=True)
@@ -727,7 +727,9 @@ class SavannaApp(tk.Tk):
             if entity["thirst"] is not None and entity["hunger"] is not None:
                 needs = f"T{entity['thirst']} H{entity['hunger']}"
             elif entity["seat_capacity"] is not None:
-                needs = f"Seats {entity['seats_taken']}/{entity['seat_capacity']}"
+                needs = f"S {entity['seats_taken']}/{entity['seat_capacity']}"
+                if entity["fuel_capacity"] is not None:
+                    needs += f" F {entity['fuel_level']}/{entity['fuel_capacity']}"
             pos = f"{entity['x']},{entity['y']}"
             self.entity_table.insert(
                 "",

@@ -296,6 +296,8 @@ class SimulationEngine(threading.Thread):
             "sightings": getattr(entity, "sightings", None),
             "seats_taken": getattr(entity, "seats_taken", None),
             "seat_capacity": getattr(entity, "seat_capacity", None),
+            "fuel_level": getattr(entity, "fuel_level", None),
+            "fuel_capacity": getattr(entity, "fuel_capacity", None),
             "territory": getattr(entity, "territory", None),
         }
 

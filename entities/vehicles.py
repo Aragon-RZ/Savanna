@@ -19,6 +19,7 @@ TOURS = [
 ]
 
 BASE_X, BASE_Y = 5, 12   # close to the oasis area
+FUEL_STATION_X, FUEL_STATION_Y = 8, 14
 
 
 def on_tour(hour):
@@ -41,15 +42,7 @@ class PatrolRouteStrategy:
 
     def execute(self, jeep):
         jeep.state = "ON TOUR"
-        # Wander within assigned zone
-        jeep.x = max(self.zone_x - self.radius,
-                     min(self.zone_x + self.radius,
-                         jeep.x + random.choice([-3, -2, -1, 0, 1, 2, 3])))
-        jeep.y = max(self.zone_y - self.radius,
-                     min(self.zone_y + self.radius,
-                         jeep.y + random.choice([-3, -2, -1, 0, 1, 2, 3])))
-        jeep.x = max(0, min(GRID_WIDTH - 1, jeep.x))
-        jeep.y = max(0, min(GRID_HEIGHT - 1, jeep.y))
+        jeep.move_randomly_in_zone(self.zone_x, self.zone_y, self.radius)
 
         # Passive sighting within zone
         nearby = [e for e in jeep.known_entities
@@ -75,13 +68,7 @@ class ChaseStrategy:
     def execute(self, jeep):
         jeep.state = f"CHASING EVENT"
 
-        if jeep.x < self.target_x: jeep.x += 2
-        elif jeep.x > self.target_x: jeep.x -= 2
-        if jeep.y < self.target_y: jeep.y += 2
-        elif jeep.y > self.target_y: jeep.y -= 2
-
-        jeep.x = max(0, min(GRID_WIDTH  - 1, jeep.x))
-        jeep.y = max(0, min(GRID_HEIGHT - 1, jeep.y))
+        jeep.move_towards(self.target_x, self.target_y, jeep.CHASE_STEP)
 
         dist = abs(jeep.x - self.target_x) + abs(jeep.y - self.target_y)
         if dist <= 3:
@@ -90,7 +77,7 @@ class ChaseStrategy:
                             f"{self.event_desc}!")
                 jeep.sightings += 1
                 self.reported = True
-            jeep.behavior = PatrolRouteStrategy()
+            jeep.behavior = PatrolRouteStrategy(jeep.zone_x, jeep.zone_y, jeep.zone_radius)
             jeep.state = "ON TOUR"
 
 
@@ -98,13 +85,7 @@ class ReturnToBaseStrategy:
     """Jeep heads back to base at end of tour."""
     def execute(self, jeep):
         jeep.state = "RETURNING TO BASE"
-        if jeep.x < BASE_X: jeep.x += 2
-        elif jeep.x > BASE_X: jeep.x -= 2
-        if jeep.y < BASE_Y: jeep.y += 2
-        elif jeep.y > BASE_Y: jeep.y -= 2
-
-        jeep.x = max(0, min(GRID_WIDTH  - 1, jeep.x))
-        jeep.y = max(0, min(GRID_HEIGHT - 1, jeep.y))
+        jeep.move_towards(BASE_X, BASE_Y, jeep.RETURN_STEP)
 
         if jeep.x == BASE_X and jeep.y == BASE_Y:
             jeep.behavior = None   # will be set to PARKED
@@ -114,11 +95,37 @@ class ReturnToBaseStrategy:
                         f"Total sightings today: {jeep.sightings}")
 
 
+class RefuelStrategy:
+    """Jeep returns to the safari station and refuels before touring again."""
+    def execute(self, jeep):
+        jeep.seats_taken = 0
+
+        if jeep.x != FUEL_STATION_X or jeep.y != FUEL_STATION_Y:
+            jeep.state = "RETURNING TO REFUEL"
+            jeep.move_towards(FUEL_STATION_X, FUEL_STATION_Y, jeep.RETURN_STEP)
+            return
+
+        jeep.state = "REFUELLING"
+        jeep.fuel_level = min(jeep.fuel_capacity, jeep.fuel_level + jeep.refuel_rate)
+        if jeep.fuel_level < jeep.fuel_capacity:
+            return
+
+        touring, nocturnal = on_tour(jeep.current_hour)
+        if touring:
+            jeep.depart_tour(nocturnal)
+        else:
+            jeep.behavior = None
+            jeep.state = "PARKED"
+
+
 # ── SAFARI JEEP ───────────────────────────────────────────────
 
 class SafariJeep(threading.Thread, EventListener):
 
-    DRIVE_SPEED = 1.5
+    DRIVE_SPEED = 0.9
+    PATROL_STEP = 4
+    CHASE_STEP = 3
+    RETURN_STEP = 3
 
     def __init__(self, name: str, x: int = BASE_X, y: int = BASE_Y,
              zone_x: int = 5, zone_y: int = 5, zone_radius: int = 10,
@@ -133,6 +140,12 @@ class SafariJeep(threading.Thread, EventListener):
         self.sightings = 0
         self.seat_capacity = seat_capacity
         self.seats_taken = 0
+        self.fuel_capacity = 100
+        self.fuel_level = 100
+        self.fuel_low_threshold = 70
+        self.minimum_tour_fuel = 90
+        self.fuel_burn_rate = 0.35
+        self.refuel_rate = 25
         self.behavior = None
         self.daemon = True
         self.is_running = False
@@ -158,7 +171,9 @@ class SafariJeep(threading.Thread, EventListener):
             touring, _ = on_tour(self.current_hour)
             if not touring:
                 return
-            if isinstance(self.behavior, ChaseStrategy):
+            if isinstance(self.behavior, (ChaseStrategy, RefuelStrategy)):
+                return
+            if self.needs_refuel():
                 return
 
             if event_type == Event.ANIMAL_HUNTING:
@@ -179,36 +194,37 @@ class SafariJeep(threading.Thread, EventListener):
     def run(self):
         self.is_running = True
         self._print(f"🚙 [{self.name}] Safari jeep ready at base ({self.x}, {self.y})")
-        last_tour_state = False
 
         while self.is_running:
             with self._lock:
                 touring, nocturnal = on_tour(self.current_hour)
 
-                if touring and not last_tour_state:
-                    tour_type = "NOCTURNAL SPECIAL" if nocturnal else "SAFARI TOUR"
-                    self._print(f"\n🚙 [{self.name}] {tour_type} departing! Hour {self.current_hour}:00")
-                    self.sightings = 0
-                    self.seats_taken = random.randint(max(1, self.seat_capacity // 2), self.seat_capacity)
-                    self.behavior = PatrolRouteStrategy(self.zone_x, self.zone_y, self.zone_radius)  # 👈
-                    last_tour_state = True
+                if self.needs_refuel() and not isinstance(self.behavior, RefuelStrategy):
+                    self.start_refuelling()
 
-                elif not touring and last_tour_state:
-                    # Tour just ended — head back
-                    if not isinstance(self.behavior, ReturnToBaseStrategy):
+                if isinstance(self.behavior, RefuelStrategy):
+                    pass
+                elif touring:
+                    if not self.is_active_tour():
+                        if self.fuel_level >= self.minimum_tour_fuel:
+                            self.depart_tour(nocturnal)
+                        else:
+                            self.start_refuelling()
+                else:
+                    if self.is_active_tour():
                         self.behavior = ReturnToBaseStrategy()
-                    last_tour_state = False
-
-                if touring and self.behavior:
-                    self.behavior.execute(self)
-                    self._print(f"   🚙 [{self.name}] @({self.x},{self.y}) | "
-                                f"{self.state} | sightings: {self.sightings}")
-                elif not touring:
-                    if isinstance(self.behavior, ReturnToBaseStrategy):
-                        self.behavior.execute(self)
+                    elif self.fuel_level < self.fuel_capacity:
+                        self.start_refuelling()
                     elif self.state != "PARKED":
                         self.state = "PARKED"
                         self.seats_taken = 0
+                        self.behavior = None
+
+                if self.behavior:
+                    self.behavior.execute(self)
+                    fuel = f"{self.fuel_level}/{self.fuel_capacity}"
+                    self._print(f"   🚙 [{self.name}] @({self.x},{self.y}) | "
+                                f"{self.state} | fuel: {fuel} | sightings: {self.sightings}")
 
             time.sleep(self.DRIVE_SPEED)
 
@@ -216,6 +232,67 @@ class SafariJeep(threading.Thread, EventListener):
         self.is_running = False
         event_bus.unsubscribe(Event.ANIMAL_HUNTING, self)
         event_bus.unsubscribe(Event.ANIMAL_DIED, self)
+
+    def depart_tour(self, nocturnal=False):
+        tour_type = "NOCTURNAL SPECIAL" if nocturnal else "SAFARI TOUR"
+        self._print(f"\n🚙 [{self.name}] {tour_type} departing! Hour {self.current_hour}:00")
+        self.sightings = 0
+        self.seats_taken = random.randint(max(1, self.seat_capacity // 2), self.seat_capacity)
+        self.behavior = PatrolRouteStrategy(self.zone_x, self.zone_y, self.zone_radius)
+        self.state = "ON TOUR"
+
+    def start_refuelling(self):
+        self.seats_taken = 0
+        self.behavior = RefuelStrategy()
+
+    def needs_refuel(self):
+        return self.fuel_level <= self.fuel_low_threshold
+
+    def is_active_tour(self):
+        return isinstance(self.behavior, (PatrolRouteStrategy, ChaseStrategy))
+
+    def move_randomly_in_zone(self, zone_x, zone_y, radius):
+        if self.fuel_level <= 0:
+            self.state = "OUT OF FUEL"
+            self.seats_taken = 0
+            return
+
+        old_x, old_y = self.x, self.y
+        self.x = max(zone_x - radius,
+                     min(zone_x + radius,
+                         self.x + random.randint(-self.PATROL_STEP, self.PATROL_STEP)))
+        self.y = max(zone_y - radius,
+                     min(zone_y + radius,
+                         self.y + random.randint(-self.PATROL_STEP, self.PATROL_STEP)))
+        self.x = max(0, min(GRID_WIDTH - 1, self.x))
+        self.y = max(0, min(GRID_HEIGHT - 1, self.y))
+        self.consume_fuel(old_x, old_y)
+
+    def move_towards(self, target_x, target_y, step):
+        if self.fuel_level <= 0 and not isinstance(self.behavior, RefuelStrategy):
+            self.state = "OUT OF FUEL"
+            self.seats_taken = 0
+            return
+
+        old_x, old_y = self.x, self.y
+        self.x += self._step_towards(self.x, target_x, step)
+        self.y += self._step_towards(self.y, target_y, step)
+        self.x = max(0, min(GRID_WIDTH - 1, self.x))
+        self.y = max(0, min(GRID_HEIGHT - 1, self.y))
+        self.consume_fuel(old_x, old_y)
+
+    def consume_fuel(self, old_x, old_y):
+        distance = abs(self.x - old_x) + abs(self.y - old_y)
+        if distance:
+            burn = max(1, round(distance * self.fuel_burn_rate))
+            self.fuel_level = max(0, self.fuel_level - burn)
+
+    def _step_towards(self, current, target, step):
+        if current < target:
+            return min(step, target - current)
+        if current > target:
+            return -min(step, current - target)
+        return 0
 
     def _print(self, *args, **kwargs):
         if self.display_output:
