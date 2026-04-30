@@ -18,6 +18,7 @@
 #   are fully decoupled.
 # ============================================================
 
+import threading
 from abc import ABC, abstractmethod
 
 
@@ -25,9 +26,11 @@ from abc import ABC, abstractmethod
 class Event:
     ANIMAL_DIED      = "animal_died"       # payload: { "entity": animal, "cause": str }
     WATER_SPOT_FREED = "water_spot_freed"  # payload: { "environment": hole, "freed_by": animal }
+    GRAZING_SPOT_FREED = "grazing_spot_freed"  # payload: { "environment": area, "freed_by": animal }
     ANIMAL_HUNTING   = "animal_hunting"    # payload: { "predator": animal, "prey": animal }
     WEATHER_CHANGED  = "weather_changed"   # payload: { "weather": str }
     ANIMAL_DESPERATE = "animal_desperate"  # payload: { "entity": animal }
+    ENTITY_ADDED     = "entity_added"      # payload: { "entity": entity }
 
 
 # ── LISTENER INTERFACE ───────────────────────────────────────
@@ -50,19 +53,23 @@ class EventBus:
 
     def __init__(self):
         self._listeners: dict[str, list] = {}
+        self._lock = threading.RLock()
 
     def subscribe(self, event_type: str, listener: EventListener):
         """Register a listener to be called when event_type fires."""
-        if event_type not in self._listeners:
-            self._listeners[event_type] = []
-        self._listeners[event_type].append(listener)
+        with self._lock:
+            if event_type not in self._listeners:
+                self._listeners[event_type] = []
+            if listener not in self._listeners[event_type]:
+                self._listeners[event_type].append(listener)
 
     def unsubscribe(self, event_type: str, listener: EventListener):
         """Remove a listener (e.g. when an entity dies)."""
-        if event_type in self._listeners:
-            self._listeners[event_type] = [
-                l for l in self._listeners[event_type] if l is not listener
-            ]
+        with self._lock:
+            if event_type in self._listeners:
+                self._listeners[event_type] = [
+                    l for l in self._listeners[event_type] if l is not listener
+                ]
 
     def emit(self, event_type: str, payload: dict = None):
         """
@@ -70,7 +77,9 @@ class EventBus:
         """
         if payload is None:
             payload = {}
-        for listener in self._listeners.get(event_type, []):
+        with self._lock:
+            listeners = list(self._listeners.get(event_type, []))
+        for listener in listeners:
             listener.on_event(event_type, payload)
 
 

@@ -30,6 +30,7 @@ class WateringHole(EnvironmentComponent):
         self.capacity = capacity
         self.spots = threading.Semaphore(capacity)  # core parallelism mechanism
         self.current_drinkers: list = []
+        self.display_output = True
 
     # ── COMPOSITE INTERFACE ──────────────────────────────────
 
@@ -71,11 +72,11 @@ class WateringHole(EnvironmentComponent):
         if self.spots.acquire(blocking=False):
             entity.state = "DRINKING"
             self.current_drinkers.append(entity)
-            print(f"💧 {entity.name} found a spot and started drinking at {self.name}!")
+            self._print(f"💧 {entity.name} found a spot and started drinking at {self.name}!")
             return True
         else:
             entity.state = "SEEKING_WATER"  # keep moving, try again next tick
-            print(f"⏳ {entity.name} is waiting in line. {self.name} is full.")
+            self._print(f"⏳ {entity.name} is waiting in line. {self.name} is full.")
             return False
 
     def finish_drinking(self, entity):
@@ -87,10 +88,169 @@ class WateringHole(EnvironmentComponent):
         if entity in self.current_drinkers:
             self.current_drinkers.remove(entity)
             self.spots.release()
-            print(f"✅ {entity.name} finished drinking and freed a spot at {self.name}.")
+            self._print(f"✅ {entity.name} finished drinking and freed a spot at {self.name}.")
 
             # 🔔 Notify all observers that a spot opened up
             event_bus.emit(Event.WATER_SPOT_FREED, {
                 "environment": self,
                 "freed_by": entity
             })
+
+    def _print(self, *args, **kwargs):
+        if self.display_output:
+            print(*args, **kwargs)
+
+
+class GrazingArea(EnvironmentComponent):
+    """
+    A natural feeding ground where herbivores can graze.
+
+    COMPOSITE : is a leaf node — lives inside a SavannaZone.
+    OBSERVER  : emits GRAZING_SPOT_AVAILABLE when space opens.
+    THREADING : Semaphore controls concurrent grazing.
+    """
+
+    def __init__(self, name: str, x: int, y: int, capacity: int = 5):
+        super().__init__(name, x, y)
+        self.capacity = capacity
+        self.spots = threading.Semaphore(capacity)
+        self.current_grazers: list = []
+        self.display_output = True
+
+    def update(self, tick: int, entities: list):
+        """
+        Called every tick. Handles finished grazers and lets
+        waiting herbivores in.
+        """
+        # Check if any grazer has finished eating
+        for entity in list(self.current_grazers):
+            if entity.state != "GRAZING":
+                self.finish_grazing(entity)
+
+        # Let in any herbivore at our location wanting to graze
+        for entity in entities:
+            if entity.is_alive and entity.state in ["SEEKING_FOOD", "WAITING_TO_GRAZE"]:
+                if entity.x == self.x and entity.y == self.y:
+                    self.try_to_graze(entity)
+
+    def status(self) -> str:
+        grazer_names = ", ".join(e.name for e in self.current_grazers) or "none"
+        free = self.capacity - len(self.current_grazers)
+        return (f"🌾 {self.name} | Capacity: {self.capacity} | "
+                f"Grazing: {len(self.current_grazers)} ({grazer_names}) | "
+                f"Free spots: {free}")
+
+    def try_to_graze(self, entity) -> bool:
+        """
+        Non-blocking attempt to give entity a grazing spot.
+        Returns True if successful, False if animal must wait.
+        """
+        if entity in self.current_grazers:
+            return True  # already grazing
+
+        if self.spots.acquire(blocking=False):
+            entity.state = "GRAZING"
+            self.current_grazers.append(entity)
+            self._print(f"🌾 {entity.name} found grass and started grazing at {self.name}!")
+            return True
+        else:
+            entity.state = "SEEKING_FOOD"  # keep moving
+            self._print(f"⏳ {entity.name} waiting to graze. {self.name} is crowded.")
+            return False
+
+    def finish_grazing(self, entity):
+        """
+        Remove entity and release the semaphore spot.
+        Reduces entity hunger as reward for grazing.
+        """
+        if entity in self.current_grazers:
+            self.current_grazers.remove(entity)
+            self.spots.release()
+            entity.hunger = max(0, entity.hunger - 15)  # reduce hunger
+            self._print(f"✅ {entity.name} finished grazing at {self.name}.")
+
+            # Notify observers
+            event_bus.emit(Event.GRAZING_SPOT_FREED, {
+                "environment": self,
+                "freed_by": entity
+            })
+
+    def _print(self, *args, **kwargs):
+        if self.display_output:
+            print(*args, **kwargs)
+
+
+class River(EnvironmentComponent):
+    """
+    A river running across the savanna. Multiple animals can
+    drink from it simultaneously (high capacity).
+
+    COMPOSITE : is a leaf node — lives inside a SavannaZone.
+    OBSERVER  : emits WATER_SPOT_FREED when space opens.
+    """
+
+    def __init__(self, name: str, x: int, y: int, capacity: int = 10):
+        super().__init__(name, x, y)
+        self.capacity = capacity
+        self.spots = threading.Semaphore(capacity)
+        self.current_drinkers: list = []
+        self.display_output = True
+
+    def update(self, tick: int, entities: list):
+        """
+        Called every tick. Handles finished drinkers and lets
+        waiting animals drink from the river.
+        """
+        # Check if any drinker has finished
+        for entity in list(self.current_drinkers):
+            if entity.state != "DRINKING":
+                self.finish_drinking(entity)
+
+        # Let in any entity at our location wanting water
+        for entity in entities:
+            if entity.is_alive and entity.state in ["SEEKING_WATER", "WAITING_IN_LINE"]:
+                if entity.x == self.x and entity.y == self.y:
+                    self.try_to_drink(entity)
+
+    def status(self) -> str:
+        drinker_names = ", ".join(e.name for e in self.current_drinkers) or "none"
+        free = self.capacity - len(self.current_drinkers)
+        return (f"🌊 {self.name} | Capacity: {self.capacity} | "
+                f"Drinking: {len(self.current_drinkers)} ({drinker_names}) | "
+                f"Free spots: {free}")
+
+    def try_to_drink(self, entity) -> bool:
+        """
+        Non-blocking attempt to give entity a drinking spot.
+        Returns True if successful, False if animal must wait.
+        """
+        if entity in self.current_drinkers:
+            return True  # already drinking
+
+        if self.spots.acquire(blocking=False):
+            entity.state = "DRINKING"
+            self.current_drinkers.append(entity)
+            self._print(f"🌊 {entity.name} found the river and started drinking at {self.name}!")
+            return True
+        else:
+            entity.state = "SEEKING_WATER"
+            self._print(f"⏳ {entity.name} waiting at the river. {self.name} is busy.")
+            return False
+
+    def finish_drinking(self, entity):
+        """
+        Remove entity and release the semaphore spot.
+        """
+        if entity in self.current_drinkers:
+            self.current_drinkers.remove(entity)
+            self.spots.release()
+            self._print(f"✅ {entity.name} finished drinking from {self.name}.")
+
+            event_bus.emit(Event.WATER_SPOT_FREED, {
+                "environment": self,
+                "freed_by": entity
+            })
+
+    def _print(self, *args, **kwargs):
+        if self.display_output:
+            print(*args, **kwargs)

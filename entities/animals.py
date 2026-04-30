@@ -22,12 +22,17 @@ class Animal(Entity):
         self.target_water = None
         self.is_diurnal = is_diurnal
         self.behavior = WanderStrategy()
+        self.display_output = True
 
     def die(self, cause):
         self.is_alive = False
         self.state = "DEAD"
-        print(f"💀 {self.name} died! Cause: {cause}.")
+        self._print(f"💀 {self.name} died! Cause: {cause}.")
         event_bus.emit(Event.ANIMAL_DIED, {"entity": self, "cause": cause})
+
+    def _print(self, *args, **kwargs):
+        if self.display_output:
+            print(*args, **kwargs)
 
     def update(self, current_hour, entities):
         if not self.is_alive:
@@ -42,16 +47,16 @@ class Animal(Entity):
         if is_desperate:
             should_be_awake = True
             if self.state == "SLEEPING":
-                print(f"⚠️  {self.name} woke up in a panic!")
+                self._print(f"⚠️  {self.name} woke up in a panic!")
                 self.state = "DESPERATE"
                 event_bus.emit(Event.ANIMAL_DESPERATE, {"entity": self})
 
         if not should_be_awake and self.state not in ["SLEEPING", "DRINKING"]:
             self.state = "SLEEPING"
-            print(f"💤 {self.name} went to sleep.")
+            self._print(f"💤 {self.name} went to sleep.")
         elif should_be_awake and self.state == "SLEEPING":
             self.state = "WANDERING"
-            print(f"☀️/🌙 {self.name} woke up.")
+            self._print(f"☀️/🌙 {self.name} woke up.")
 
         self.thirst += 2
         self.hunger += 1

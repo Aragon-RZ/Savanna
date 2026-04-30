@@ -46,15 +46,19 @@ class WanderStrategy(BehaviorStrategy):
 
 
 class SeekWaterStrategy(BehaviorStrategy):
-    """Animal is thirsty — moves directly toward its watering hole."""
+    """Animal is thirsty — moves directly toward its closest watering hole."""
     def execute(self, animal, entities: list):
         if animal.target_water:
             animal.state = "SEEKING_WATER"
-            animal.move_towards(animal.target_water.x, animal.target_water.y)
+            # Find closest watering hole by Manhattan distance
+            closest_water = min(
+                animal.target_water,
+                key=lambda w: abs(w.x - animal.x) + abs(w.y - animal.y)
+            )
+            animal.move_towards(closest_water.x, closest_water.y)
         else:
             animal.state = "WANDERING"
             animal.move_randomly()
-
 
 class FleeStrategy(BehaviorStrategy):
     """
@@ -127,4 +131,4 @@ class HuntStrategy(BehaviorStrategy):
             target.die(f"Hunted by {animal.name}")
             animal.hunger = 0
             animal.state = "WANDERING"
-            print(f"🥩 {animal.name} feasted on {target.name}!")
+            animal._print(f"🥩 {animal.name} feasted on {target.name}!")

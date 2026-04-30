@@ -42,12 +42,14 @@ class PatrolRouteStrategy:
     def execute(self, jeep):
         jeep.state = "ON TOUR"
         # Wander within assigned zone
-        jeep.x = max(self.zone_x - self.radius, 
+        jeep.x = max(self.zone_x - self.radius,
                      min(self.zone_x + self.radius,
-                         jeep.x + random.choice([-3,-2,-1,0,1,2,3])))
+                         jeep.x + random.choice([-3, -2, -1, 0, 1, 2, 3])))
         jeep.y = max(self.zone_y - self.radius,
                      min(self.zone_y + self.radius,
-                         jeep.y + random.choice([-3,-2,-1,0,1,2,3])))
+                         jeep.y + random.choice([-3, -2, -1, 0, 1, 2, 3])))
+        jeep.x = max(0, min(GRID_WIDTH - 1, jeep.x))
+        jeep.y = max(0, min(GRID_HEIGHT - 1, jeep.y))
 
         # Passive sighting within zone
         nearby = [e for e in jeep.known_entities
@@ -57,8 +59,8 @@ class PatrolRouteStrategy:
                   and abs(e.x - jeep.x) + abs(e.y - jeep.y) <= 8]
         if nearby:
             spotted = nearby[0]
-            print(f"   📷 [{jeep.name}] Tourists spotted: "
-                  f"{spotted.name} ({spotted.state}) nearby!")
+            jeep._print(f"   📷 [{jeep.name}] Tourists spotted: "
+                        f"{spotted.name} ({spotted.state}) nearby!")
             jeep.sightings += 1
 
 
@@ -84,8 +86,8 @@ class ChaseStrategy:
         dist = abs(jeep.x - self.target_x) + abs(jeep.y - self.target_y)
         if dist <= 3:
             if not self.reported:
-                print(f"   📸 [{jeep.name}] SIGHTING! Tourists witnessed: "
-                      f"{self.event_desc}!")
+                jeep._print(f"   📸 [{jeep.name}] SIGHTING! Tourists witnessed: "
+                            f"{self.event_desc}!")
                 jeep.sightings += 1
                 self.reported = True
             jeep.behavior = PatrolRouteStrategy()
@@ -107,8 +109,8 @@ class ReturnToBaseStrategy:
         if jeep.x == BASE_X and jeep.y == BASE_Y:
             jeep.behavior = None   # will be set to PARKED
             jeep.state = "PARKED"
-            print(f"   🚙 [{jeep.name}] Tour complete! "
-                  f"Total sightings today: {jeep.sightings}")
+            jeep._print(f"   🚙 [{jeep.name}] Tour complete! "
+                        f"Total sightings today: {jeep.sightings}")
 
 
 # ── SAFARI JEEP ───────────────────────────────────────────────
@@ -118,7 +120,8 @@ class SafariJeep(threading.Thread, EventListener):
     DRIVE_SPEED = 1.5
 
     def __init__(self, name: str, x: int = BASE_X, y: int = BASE_Y,
-             zone_x: int = 5, zone_y: int = 5, zone_radius: int = 10):
+             zone_x: int = 5, zone_y: int = 5, zone_radius: int = 10,
+             display_output: bool = True):
         threading.Thread.__init__(self)
         self.name = name
         self.id = ""
@@ -129,6 +132,8 @@ class SafariJeep(threading.Thread, EventListener):
         self.sightings = 0
         self.behavior = None
         self.daemon = True
+        self.is_running = False
+        self.display_output = display_output
         self._lock = threading.Lock()
         self.current_hour = 0
         self.known_entities = []
@@ -158,7 +163,7 @@ class SafariJeep(threading.Thread, EventListener):
                 prey = payload.get("prey")
                 if predator and prey:
                     desc = f"{predator.name} hunted {prey.name}"
-                    print(f"   🚙 [{self.name}] Hunt nearby! Racing to scene...")
+                    self._print(f"   🚙 [{self.name}] Hunt nearby! Racing to scene...")
                     self.behavior = ChaseStrategy(predator.x, predator.y, desc)
 
             elif event_type == Event.ANIMAL_DIED:
@@ -169,16 +174,17 @@ class SafariJeep(threading.Thread, EventListener):
                     self.behavior = ChaseStrategy(entity.x, entity.y, desc)
 
     def run(self):
-        print(f"🚙 [{self.name}] Safari jeep ready at base ({self.x}, {self.y})")
+        self.is_running = True
+        self._print(f"🚙 [{self.name}] Safari jeep ready at base ({self.x}, {self.y})")
         last_tour_state = False
 
-        while True:
+        while self.is_running:
             with self._lock:
                 touring, nocturnal = on_tour(self.current_hour)
 
                 if touring and not last_tour_state:
                     tour_type = "NOCTURNAL SPECIAL" if nocturnal else "SAFARI TOUR"
-                    print(f"\n🚙 [{self.name}] {tour_type} departing! Hour {self.current_hour}:00")
+                    self._print(f"\n🚙 [{self.name}] {tour_type} departing! Hour {self.current_hour}:00")
                     self.sightings = 0
                     self.behavior = PatrolRouteStrategy(self.zone_x, self.zone_y, self.zone_radius)  # 👈
                     last_tour_state = True
@@ -191,8 +197,8 @@ class SafariJeep(threading.Thread, EventListener):
 
                 if touring and self.behavior:
                     self.behavior.execute(self)
-                    print(f"   🚙 [{self.name}] @({self.x},{self.y}) | "
-                          f"{self.state} | sightings: {self.sightings}")
+                    self._print(f"   🚙 [{self.name}] @({self.x},{self.y}) | "
+                                f"{self.state} | sightings: {self.sightings}")
                 elif not touring:
                     if isinstance(self.behavior, ReturnToBaseStrategy):
                         self.behavior.execute(self)
@@ -200,3 +206,12 @@ class SafariJeep(threading.Thread, EventListener):
                         self.state = "PARKED"
 
             time.sleep(self.DRIVE_SPEED)
+
+    def stop(self):
+        self.is_running = False
+        event_bus.unsubscribe(Event.ANIMAL_HUNTING, self)
+        event_bus.unsubscribe(Event.ANIMAL_DIED, self)
+
+    def _print(self, *args, **kwargs):
+        if self.display_output:
+            print(*args, **kwargs)

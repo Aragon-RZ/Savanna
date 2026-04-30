@@ -80,11 +80,13 @@ class WeatherSystem(threading.Thread):
         StormEffect,
     ]
 
-    def __init__(self):
+    def __init__(self, display_output=True):
         super().__init__()
         self.daemon = True   # ← dies when main thread stops
         self.current_effect = WeatherEffect()   # start clear
+        self.display_output = display_output
         self._lock = threading.Lock()
+        self._stop_event = threading.Event()
 
     @property
     def current_weather(self):
@@ -102,10 +104,16 @@ class WeatherSystem(threading.Thread):
                     self.current_effect.hunger_modifier)
 
     def run(self):
-        print("🌤️  WeatherSystem daemon started.")
-        while True:
-            time.sleep(self.WEATHER_INTERVAL)
+        self._print("🌤️  WeatherSystem daemon started.")
+        while not self._stop_event.wait(self.WEATHER_INTERVAL):
             self._change_weather()
+
+    def stop(self):
+        self._stop_event.set()
+
+    def _print(self, *args, **kwargs):
+        if self.display_output:
+            print(*args, **kwargs)
 
     def _change_weather(self):
         """Pick a new random weather — never the same as current."""
@@ -115,9 +123,9 @@ class WeatherSystem(threading.Thread):
         with self._lock:
             self.current_effect = new_effect
 
-        print(f"\n{'='*40}")
-        print(new_effect.describe())
-        print(f"{'='*40}\n")
+        self._print(f"\n{'='*40}")
+        self._print(new_effect.describe())
+        self._print(f"{'='*40}\n")
 
         event_bus.emit(Event.WEATHER_CHANGED, {
             "weather": new_effect.name,
