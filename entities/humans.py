@@ -82,13 +82,14 @@ class Ranger(threading.Thread, EventListener):
         self.id = ""      
         self.x = x
         self.y = y
+        self.engine_ref = None                 # dies when engine stops
         self.territory = territory or ("south" if y >= GRID_HEIGHT // 2 else "north")
         self.display_output = display_output
         self.state = "PATROLLING"
         self.is_alive = True
         self.behavior = RangerStrategy()   # default strategy
         self.is_running = False
-        self.daemon = True                 # dies when engine stops
+        self.daemon = True
         self._lock = threading.Lock()
 
         # OBSERVER — subscribe to relevant events
@@ -139,6 +140,11 @@ class Ranger(threading.Thread, EventListener):
         self._print(f"🌿  {self.name} started patrol at ({self.x}, {self.y})")
 
         while self.is_running:
+            # PAUSE CHECK
+            if self.engine_ref and self.engine_ref.is_paused():
+                time.sleep(0.1)
+                continue
+
             with self._lock:
                 self.behavior.execute(self)
 

@@ -195,6 +195,7 @@ class SafariBuilder:
                 territory=territory,
                 display_output=self.display_output
             )
+            ranger.engine_ref = self.engine
             if self.auto_start_workers:
                 ranger.start()
             self.engine.add_entity(ranger)
@@ -213,6 +214,7 @@ class SafariBuilder:
             jeep = SafariJeep(name=f"Jeep {i+1}", x=start_x, y=start_y,
                             zone_x=zone_x, zone_y=zone_y, zone_radius=radius,
                             display_output=self.display_output)
+            jeep.engine_ref = self.engine  
             jeep.known_entities = self.engine.entities
             if self.auto_start_workers:
                 jeep.start()

@@ -511,7 +511,7 @@ class SavannaApp(tk.Tk):
         self.engine.stop()
         if self.engine.is_alive():
             self.engine.join(timeout=1.0)
-        self.engine_started = True
+        self.engine_started = False
 
     def _on_speed_change(self, value):
         speed = float(value)

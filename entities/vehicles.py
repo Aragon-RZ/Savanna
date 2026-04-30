@@ -127,6 +127,7 @@ class SafariJeep(threading.Thread, EventListener):
         self.id = ""
         self.x = x
         self.y = y
+        self.engine_ref = None
         self.state = "PARKED"
         self.is_alive = True
         self.sightings = 0
@@ -179,6 +180,11 @@ class SafariJeep(threading.Thread, EventListener):
         last_tour_state = False
 
         while self.is_running:
+            # PAUSE CHECK — wait if engine is paused
+            if hasattr(self, 'engine_ref') and self.engine_ref and self.engine_ref.is_paused():
+                time.sleep(0.1)
+                continue
+
             with self._lock:
                 touring, nocturnal = on_tour(self.current_hour)
 
@@ -186,11 +192,10 @@ class SafariJeep(threading.Thread, EventListener):
                     tour_type = "NOCTURNAL SPECIAL" if nocturnal else "SAFARI TOUR"
                     self._print(f"\n🚙 [{self.name}] {tour_type} departing! Hour {self.current_hour}:00")
                     self.sightings = 0
-                    self.behavior = PatrolRouteStrategy(self.zone_x, self.zone_y, self.zone_radius)  # 👈
+                    self.behavior = PatrolRouteStrategy(self.zone_x, self.zone_y, self.zone_radius)
                     last_tour_state = True
 
                 elif not touring and last_tour_state:
-                    # Tour just ended — head back
                     if not isinstance(self.behavior, ReturnToBaseStrategy):
                         self.behavior = ReturnToBaseStrategy()
                     last_tour_state = False
